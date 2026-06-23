@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{ page_title }} · Prevent Auto</title>
+    <link rel="stylesheet" href="{{ request.url_for('static', path='styles.css') }}">
+    <link rel="stylesheet" href="{{ request.url_for('static', path='mobile.css') }}">
+  </head>
+  <body>
+    <div class="page-shell">
+      <aside class="side-nav" id="side-nav">
+        <div class="side-nav-header">
+          <div>
+            <p class="brand-tag">Prevent Auto</p>
+            <h1 class="brand-title">防超时签到自动补约</h1>
+          </div>
+          <button class="side-nav-close" type="button" data-nav-close>收起</button>
+        </div>
+        <nav class="nav-links">
+          <a href="/">仪表盘</a>
+          <a href="/accounts">号池管理</a>
+          <a href="/automation-tasks">自动任务</a>
+          <a href="/client-tokens">客户端 Token</a>
+        </nav>
+        {% if request.state.is_authenticated %}
+        <form class="logout-form" method="post" action="/logout">
+          <button class="button ghost nav-logout" type="submit">退出登录</button>
+        </form>
+        {% endif %}
+      </aside>
+      <button class="nav-scrim" type="button" aria-label="关闭菜单" data-nav-close></button>
+      <main class="content-shell">
+        <div class="mobile-page-bar">
+          <button class="mobile-nav-toggle" type="button" aria-controls="side-nav" aria-expanded="false" data-nav-toggle>菜单</button>
+          <span class="mobile-page-title">{{ page_title }}</span>
+        </div>
+        {% if notice_message %}
+        <div class="flash-banner" role="status">{{ notice_message }}</div>
+        {% endif %}
+        {% block content %}{% endblock %}
+      </main>
+    </div>
+    <script>
+      (() => {
+        const body = document.body;
+        const toggleButtons = document.querySelectorAll("[data-nav-toggle]");
+        const closeButtons = document.querySelectorAll("[data-nav-close]");
+
+        if (!toggleButtons.length || !closeButtons.length) {
+          return;
+        }
+
+        function setNavOpen(isOpen) {
+          body.classList.toggle("nav-open", isOpen);
+          toggleButtons.forEach((button) => {
+            button.setAttribute("aria-expanded", String(isOpen));
+          });
+        }
+
+        toggleButtons.forEach((button) => {
+          button.addEventListener("click", () => {
+            setNavOpen(!body.classList.contains("nav-open"));
+          });
+        });
+
+        closeButtons.forEach((button) => {
+          button.addEventListener("click", () => {
+            setNavOpen(false);
+          });
+        });
+      })();
+    </script>
+    <script>
+      (() => {
+        document.querySelectorAll("[data-summary-action]").forEach((button) => {
+          button.addEventListener("click", (event) => {
+            event.stopPropagation();
+          });
+        });
+
+        document.querySelectorAll("form[data-confirm-message]").forEach((form) => {
+          form.addEventListener("submit", (event) => {
+            const message = form.dataset.confirmMessage;
+
+            if (message && !window.confirm(message)) {
+              event.preventDefault();
+            }
+          });
+        });
+      })();
+    </script>
+  </body>
+  </html>

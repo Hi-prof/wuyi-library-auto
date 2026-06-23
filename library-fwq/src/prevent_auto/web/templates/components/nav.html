@@ -1,0 +1,75 @@
+<nav class="bg-white border-b border-gray-200 sticky top-0 z-50" x-data="{ mobileMenuOpen: false }">
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div class="flex justify-between h-16">
+      <!-- Logo and brand -->
+      <div class="flex items-center">
+        <div class="flex-shrink-0 flex items-center">
+          <h1 class="text-xl font-bold text-primary-600">Prevent Auto</h1>
+        </div>
+
+        <!-- Desktop navigation -->
+        <div class="hidden md:ml-8 md:flex md:space-x-4">
+          <a href="/" class="px-3 py-2 rounded-md text-sm font-medium text-gray-900 hover:bg-gray-100">
+            仪表盘
+          </a>
+          <a href="/accounts" class="px-3 py-2 rounded-md text-sm font-medium text-gray-900 hover:bg-gray-100">
+            号池管理
+          </a>
+          <a href="/automation-tasks" class="px-3 py-2 rounded-md text-sm font-medium text-gray-900 hover:bg-gray-100">
+            自动任务
+          </a>
+          <a href="/client-tokens" class="px-3 py-2 rounded-md text-sm font-medium text-gray-900 hover:bg-gray-100">
+            客户端 Token
+          </a>
+        </div>
+      </div>
+
+      <!-- User menu and mobile toggle -->
+      <div class="flex items-center">
+        {% if request.state.is_authenticated %}
+        <form method="post" action="/logout" class="hidden md:block">
+          <button type="submit" class="btn btn-secondary">退出登录</button>
+        </form>
+        {% endif %}
+
+        <!-- Mobile menu button -->
+        <button @click="mobileMenuOpen = !mobileMenuOpen" type="button"
+                class="md:hidden ml-4 inline-flex items-center justify-center p-2 rounded-md text-gray-400 hover:text-gray-500 hover:bg-gray-100">
+          <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
+          </svg>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Mobile menu -->
+  <div x-show="mobileMenuOpen"
+       x-transition:enter="transition ease-out duration-200"
+       x-transition:enter-start="opacity-0 transform scale-95"
+       x-transition:enter-end="opacity-100 transform scale-100"
+       x-transition:leave="transition ease-in duration-150"
+       x-transition:leave-start="opacity-100 transform scale-100"
+       x-transition:leave-end="opacity-0 transform scale-95"
+       class="md:hidden">
+    <div class="px-2 pt-2 pb-3 space-y-1">
+      <a href="/" class="block px-3 py-2 rounded-md text-base font-medium text-gray-900 hover:bg-gray-100">
+        仪表盘
+      </a>
+      <a href="/accounts" class="block px-3 py-2 rounded-md text-base font-medium text-gray-900 hover:bg-gray-100">
+        号池管理
+      </a>
+      <a href="/automation-tasks" class="block px-3 py-2 rounded-md text-base font-medium text-gray-900 hover:bg-gray-100">
+        自动任务
+      </a>
+      <a href="/client-tokens" class="block px-3 py-2 rounded-md text-base font-medium text-gray-900 hover:bg-gray-100">
+        客户端 Token
+      </a>
+      {% if request.state.is_authenticated %}
+      <form method="post" action="/logout" class="px-3 py-2">
+        <button type="submit" class="btn btn-secondary w-full">退出登录</button>
+      </form>
+      {% endif %}
+    </div>
+  </div>
+</nav>
