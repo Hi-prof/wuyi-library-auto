@@ -1,0 +1,201 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="hero-panel compact account-page-hero">
+  <div>
+    <h2>客户端 Token 签发</h2>
+    <p class="panel-subtitle">为 Windows / Android 客户端签发 Bearer Token；明文仅在签发瞬间展示一次，请立即复制保存。列表中的「Token 预览」只显示头 6 位与尾 4 位，便于事后比对识别。</p>
+  </div>
+  <div class="account-page-actions">
+    <a class="button ghost" href="/accounts">返回号池管理</a>
+  </div>
+</section>
+
+{% if issued_token %}
+<section class="panel" data-issued-token-banner>
+  <div class="panel-heading-row">
+    <h3>新签发 Token{% if issued_label %} · {{ issued_label }}{% endif %}</h3>
+    <button
+      class="button ghost copy-button"
+      type="button"
+      data-copy-source="issued-token-value"
+      data-default-label="复制 Token"
+    >复制 Token</button>
+  </div>
+  <p class="status-pill warning">这是该 Token 唯一一次明文展示，刷新后将无法再次查看，请立即复制并安全保存。</p>
+  <pre class="issued-token-value" id="issued-token-value">{{ issued_token }}</pre>
+  <p class="panel-subtitle">服务端只保存 <code>sha256(token + pepper)</code>，明文不会写入数据库或日志。</p>
+</section>
+{% endif %}
+
+<section class="panel">
+  <div class="panel-heading-row">
+    <h3>签发新 Token</h3>
+  </div>
+  <form class="form-grid" method="post" action="/client-tokens">
+    <label>
+      <span>备注（label）</span>
+      <input
+        type="text"
+        name="label"
+        maxlength="64"
+        required
+        placeholder="例如：windows-办公室、android-张三"
+      >
+    </label>
+    <label>
+      <span>客户端类型</span>
+      <select name="client_kind" required>
+        {% for value, display in client_kind_choices %}
+        <option value="{{ value }}">{{ display }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <div class="form-actions">
+      <button class="button primary" type="submit">签发 Token</button>
+    </div>
+  </form>
+</section>
+
+<section class="panel">
+  <div class="panel-heading-row">
+    <h3>Token 列表</h3>
+    <form
+      class="inline-form"
+      method="post"
+      action="/client-tokens/purge-revoked"
+      data-confirm-message="将删除所有已撤销的 Token 记录，此操作不可恢复，确认清除？"
+    >
+      <button class="button danger" type="submit">一键清除无效 Token</button>
+    </form>
+  </div>
+  {% if tokens %}
+  <table>
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>备注</th>
+        <th>客户端</th>
+        <th>Token 预览</th>
+        <th>签发时间</th>
+        <th>撤销时间</th>
+        <th>状态</th>
+        <th>操作</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for token in tokens %}
+      <tr>
+        <td>#{{ token.id }}</td>
+        <td>{{ token.label }}</td>
+        <td>{{ token.client_kind_label }}</td>
+        <td>
+          {% if issued_token and issued_id == token.id %}
+          <code class="token-preview" id="token-full-{{ token.id }}">{{ issued_token }}</code>
+          <button
+            class="button ghost compact copy-button"
+            type="button"
+            data-copy-source="token-full-{{ token.id }}"
+            data-default-label="复制"
+            title="复制完整 Token（仅本次可见）"
+          >复制</button>
+          {% elif token.token_preview %}
+          <code class="token-preview" id="token-preview-{{ token.id }}">{{ token.token_preview }}</code>
+          <button
+            class="button ghost compact copy-button"
+            type="button"
+            data-copy-source="token-preview-{{ token.id }}"
+            data-default-label="复制"
+            title="复制 Token 预览（仅头尾片段，用于比对识别）"
+          >复制</button>
+          {% else %}
+          <span class="empty-state" title="历史记录无明文片段，仅新签发的 Token 提供预览">—</span>
+          {% endif %}
+        </td>
+        <td>{{ format_datetime(token.created_at, default="-") }}</td>
+        <td>{{ format_datetime(token.revoked_at, default="-") }}</td>
+        <td>
+          {% if token.revoked_at %}
+          <span class="status-pill muted">已撤销</span>
+          {% else %}
+          <span class="status-pill success">有效</span>
+          {% endif %}
+        </td>
+        <td>
+          {% if not token.revoked_at %}
+          <form
+            class="inline-form"
+            method="post"
+            action="/client-tokens/{{ token.id }}/revoke"
+            data-confirm-message="撤销后将立即失效，确认撤销 {{ token.label }}？"
+          >
+            <button class="button danger" type="submit">撤销</button>
+          </form>
+          {% else %}
+          <form
+            class="inline-form"
+            method="post"
+            action="/client-tokens/{{ token.id }}/delete"
+            data-confirm-message="删除后记录不可恢复，确认删除 {{ token.label }}？"
+          >
+            <button class="button danger" type="submit">删除</button>
+          </form>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="empty-state">暂未签发任何客户端 Token。</p>
+  {% endif %}
+</section>
+
+<script>
+  (() => {
+    const copyButtons = document.querySelectorAll("[data-copy-source]");
+
+    async function copyText(text) {
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(text);
+        return;
+      }
+      const helper = document.createElement("textarea");
+      helper.value = text;
+      helper.setAttribute("readonly", "readonly");
+      helper.style.position = "fixed";
+      helper.style.opacity = "0";
+      document.body.appendChild(helper);
+      helper.select();
+      const copied = document.execCommand("copy");
+      document.body.removeChild(helper);
+      if (!copied) {
+        throw new Error("copy failed");
+      }
+    }
+
+    copyButtons.forEach((button) => {
+      button.addEventListener("click", async () => {
+        const sourceId = button.dataset.copySource;
+        const source = document.getElementById(sourceId);
+        if (!source) {
+          return;
+        }
+        const text = source.textContent.trim();
+        if (!text) {
+          return;
+        }
+        const defaultLabel = button.dataset.defaultLabel || button.textContent.trim();
+        try {
+          await copyText(text);
+          button.textContent = "已复制";
+        } catch {
+          button.textContent = "复制失败";
+        }
+        window.setTimeout(() => {
+          button.textContent = defaultLabel;
+        }, 1800);
+      });
+    });
+  })();
+</script>
+{% endblock %}

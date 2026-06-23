@@ -1,0 +1,212 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="hero-panel compact">
+  <h2>巡检和取消记录都在这里</h2>
+</section>
+
+<nav class="logs-tabs" aria-label="日志分类">
+  <a class="logs-tab {% if active_tab == 'default' %}is-active{% endif %}"
+     href="/logs"
+     {% if active_tab == 'default' %}aria-current="page"{% endif %}
+  >运行日志</a>
+  <a class="logs-tab {% if active_tab == 'pool' %}is-active{% endif %}"
+     href="/logs?audit=pool"
+     {% if active_tab == 'pool' %}aria-current="page"{% endif %}
+  >池审计</a>
+</nav>
+
+{% if active_tab == 'pool' %}
+<section class="panel">
+  <div class="panel-heading-row">
+    <h3>池审计日志</h3>
+    <button
+      class="button ghost copy-button"
+      type="button"
+      data-copy-source="pool-audit-log-list"
+      data-default-label="复制池审计日志"
+      {% if not pool_audit_logs %}disabled{% endif %}
+    >复制池审计日志</button>
+  </div>
+  <form class="pool-audit-filters" method="get" action="/logs">
+    <input type="hidden" name="audit" value="pool">
+    <div class="form-grid pool-audit-filter-grid">
+      <label>
+        <span>账号 ID</span>
+        <input
+          type="number"
+          inputmode="numeric"
+          min="1"
+          step="1"
+          name="account_id"
+          value="{{ audit_filter_account_id }}"
+          placeholder="可选，例如 17"
+        >
+      </label>
+      <label>
+        <span>起始时间（包含）</span>
+        <input
+          type="datetime-local"
+          name="created_after"
+          value="{{ audit_filter_created_after }}"
+        >
+      </label>
+      <label>
+        <span>截止时间（包含）</span>
+        <input
+          type="datetime-local"
+          name="created_before"
+          value="{{ audit_filter_created_before }}"
+        >
+      </label>
+      <label class="pool-audit-filter-actions">
+        <span>动作类型（可多选）</span>
+        <select name="audit_action" multiple size="6">
+          {% for value, label in audit_action_options %}
+          <option value="{{ value }}" {% if value in audit_filter_actions %}selected{% endif %}>
+            {{ label }}（{{ value }}）
+          </option>
+          {% endfor %}
+        </select>
+      </label>
+    </div>
+    <div class="form-actions">
+      <button class="button primary" type="submit">应用筛选</button>
+      <a class="button ghost" href="/logs?audit=pool">重置</a>
+    </div>
+    {% if audit_filter_error %}
+    <p class="form-error" role="alert">{{ audit_filter_error }}</p>
+    {% endif %}
+  </form>
+  <ul class="log-list" id="pool-audit-log-list">
+    {% for item in pool_audit_logs %}
+    <li>
+      <strong>{{ format_datetime(item.created_at, default="无时间") }}</strong>
+      <span>
+        {{ item.audit_action_label }}
+        · {{ "成功" if item.success else "失败" }}
+        · 触发：{{ item.trigger_source }}
+        · 操作者：{{ item.operator }}
+        {% if item.summary %} · {{ item.summary }}{% endif %}
+      </span>
+    </li>
+    {% else %}
+    <li class="empty-state">
+      {% if audit_filter_error %}
+      请先修正筛选条件再查看池审计日志。
+      {% else %}
+      暂无池审计日志。
+      {% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+</section>
+{% else %}
+<section class="split-grid">
+  <article class="panel">
+    <div class="panel-heading-row">
+      <h3>动作日志</h3>
+      <button
+        class="button ghost copy-button"
+        type="button"
+        data-copy-source="action-log-list"
+        data-default-label="复制动作日志"
+        {% if not action_logs %}disabled{% endif %}
+      >
+        复制动作日志
+      </button>
+    </div>
+    <ul class="log-list" id="action-log-list">
+      {% for item in action_logs %}
+      <li><strong>{{ format_datetime(item.created_at, default="无时间") }}</strong><span>{{ item.action_type }} · {{ "成功" if item.success else "失败" }} · {{ item.message }}</span></li>
+      {% else %}
+      <li class="empty-state">暂无动作日志。</li>
+      {% endfor %}
+    </ul>
+  </article>
+  <article class="panel">
+    <div class="panel-heading-row">
+      <h3>巡检记录</h3>
+      <button
+        class="button ghost copy-button"
+        type="button"
+        data-copy-source="monitor-log-list"
+        data-default-label="复制巡检记录"
+        {% if not monitor_records %}disabled{% endif %}
+      >
+        复制巡检记录
+      </button>
+    </div>
+    <ul class="log-list" id="monitor-log-list">
+      {% for item in monitor_records %}
+      <li><strong>{{ format_datetime(item.detected_at, default="无时间") }}</strong><span>{{ item.decision }} · {{ item.detail }}{% if item.booking_id %} · booking {{ item.booking_id }}{% endif %}</span></li>
+      {% else %}
+      <li class="empty-state">暂无巡检记录。</li>
+      {% endfor %}
+    </ul>
+  </article>
+</section>
+{% endif %}
+
+<script>
+  (() => {
+    const copyButtons = document.querySelectorAll("[data-copy-source]");
+
+    async function copyText(text) {
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(text);
+        return;
+      }
+
+      const helper = document.createElement("textarea");
+      helper.value = text;
+      helper.setAttribute("readonly", "readonly");
+      helper.style.position = "fixed";
+      helper.style.opacity = "0";
+      document.body.appendChild(helper);
+      helper.select();
+      const copied = document.execCommand("copy");
+      document.body.removeChild(helper);
+
+      if (!copied) {
+        throw new Error("copy failed");
+      }
+    }
+
+    function buildCopyText(list) {
+      return Array.from(list.querySelectorAll("li"))
+        .map((item) => item.textContent.replace(/\s+/g, " ").trim())
+        .filter(Boolean)
+        .join("\n");
+    }
+
+    copyButtons.forEach((button) => {
+      button.addEventListener("click", async () => {
+        const sourceId = button.dataset.copySource;
+        const source = document.getElementById(sourceId);
+
+        if (!source) {
+          return;
+        }
+
+        const text = buildCopyText(source);
+        if (!text) {
+          return;
+        }
+
+        const defaultLabel = button.dataset.defaultLabel || button.textContent.trim();
+
+        try {
+          await copyText(text);
+          button.textContent = "已复制";
+        } catch {
+          button.textContent = "复制失败";
+        }
+
+        window.setTimeout(() => {
+          button.textContent = defaultLabel;
+        }, 1800);
+      });
+    });
+  })();
+</script>
+{% endblock %}

@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{ page_title }} · Prevent Auto</title>
+    <link rel="stylesheet" href="{{ request.url_for('static', path='styles.css') }}">
+    <link rel="stylesheet" href="{{ request.url_for('static', path='mobile.css') }}">
+  </head>
+  <body class="login-page">
+    <main class="login-shell">
+      <section class="login-card">
+        <h1>登录后继续</h1>
+        <p>访问验证</p>
+        {% if error_message %}
+        <p class="form-error">{{ error_message }}</p>
+        {% endif %}
+        <form class="form-grid login-form" method="post" action="/login">
+          <input type="hidden" name="next" value="{{ next_path }}">
+          <label>
+            账号
+            <input type="text" name="username" autocomplete="username" required>
+          </label>
+          <label>
+            密码
+            <input type="password" name="password" autocomplete="current-password" required>
+          </label>
+          <button class="button primary" type="submit">登录</button>
+        </form>
+      </section>
+    </main>
+  </body>
+</html>

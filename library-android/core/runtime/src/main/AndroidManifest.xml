@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission
+        android:name="android.permission.BLUETOOTH_SCAN"
+        android:usesPermissionFlags="neverForLocation" />
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
+    <!-- Android 14+ 要求 dataSync 类型的前台服务额外声明此权限。 -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <!-- exact alarm 兜底：在 Doze / 长时间灭屏下穿透系统省电策略，准时触发签到。 -->
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+
+    <application>
+        <service
+            android:name=".service.BeaconForegroundService"
+            android:exported="false"
+            android:foregroundServiceType="connectedDevice" />
+
+        <!-- 常驻签到调度守护服务：保持进程长存，对每条预约挂一个 delay 协程到点 enqueue GuardWorker。
+             foregroundServiceType=dataSync：与签到/网络任务语义最贴近，且不需要额外权限申请。
+             android:process=":guard"：独立进程运行，UI 进程崩溃 / 被系统杀掉不会牵连守护链路。
+             代价：多 30~60MB 内存、Application.onCreate 在 :guard 进程会再跑一次（已加进程判断防止重复初始化）。 -->
+        <service
+            android:name=".service.GuardSchedulerService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync"
+            android:process=":guard" />
+
+        <receiver
+            android:name=".receiver.BootRestoreReceiver"
+            android:enabled="true"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
+
+        <!-- exact alarm 兜底接收器：AlarmManager 唤醒后立刻把签到任务交给 ReservationGuardWorker。 -->
+        <receiver
+            android:name=".alarm.GuardExactAlarmReceiver"
+            android:enabled="true"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.wuyi.libraryauto.action.GUARD_EXACT_ALARM_TRIGGER" />
+                <data android:scheme="wuyi-guard-alarm" />
+            </intent-filter>
+        </receiver>
+    </application>
+</manifest>

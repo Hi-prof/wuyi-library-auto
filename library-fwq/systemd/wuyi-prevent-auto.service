@@ -1,0 +1,15 @@
+[Unit]
+Description=Wuyi Prevent Auto Service
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/wuyi-library-auto
+Environment=PYTHONPATH=/opt/wuyi-library-auto/library-window/src:/opt/wuyi-library-auto/library-fwq/src
+Environment=PREVENT_AUTO_PORT=5000
+ExecStart=/opt/wuyi-library-auto/.venv/bin/python -m prevent_auto.main
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,92 @@
+<script>
+  (() => {
+    const openButtons = document.querySelectorAll("[data-account-dialog-open]");
+    const closeButtons = document.querySelectorAll("[data-account-dialog-close]");
+    const dialogs = document.querySelectorAll("[data-account-dialog]");
+    const copyButtons = document.querySelectorAll("[data-copy-source]");
+
+    async function copyText(text) {
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(text);
+        return;
+      }
+
+      const helper = document.createElement("textarea");
+      helper.value = text;
+      helper.setAttribute("readonly", "readonly");
+      helper.style.position = "fixed";
+      helper.style.opacity = "0";
+      document.body.appendChild(helper);
+      helper.select();
+      const copied = document.execCommand("copy");
+      document.body.removeChild(helper);
+
+      if (!copied) {
+        throw new Error("copy failed");
+      }
+    }
+
+    function buildCopyText(list) {
+      return Array.from(list.querySelectorAll("li"))
+        .map((item) => item.textContent.replace(/\s+/g, " ").trim())
+        .filter(Boolean)
+        .join("\n");
+    }
+
+    openButtons.forEach((button) => {
+      button.addEventListener("click", () => {
+        const dialog = document.getElementById(button.dataset.accountDialogOpen);
+
+        if (dialog && typeof dialog.showModal === "function" && !dialog.open) {
+          dialog.showModal();
+        }
+      });
+    });
+
+    closeButtons.forEach((button) => {
+      button.addEventListener("click", () => {
+        const dialog = button.closest("dialog");
+
+        if (dialog && typeof dialog.close === "function") {
+          dialog.close();
+        }
+      });
+    });
+
+    dialogs.forEach((dialog) => {
+      dialog.addEventListener("click", (event) => {
+        if (event.target === dialog && typeof dialog.close === "function") {
+          dialog.close();
+        }
+      });
+    });
+
+    copyButtons.forEach((button) => {
+      button.addEventListener("click", async () => {
+        const source = document.getElementById(button.dataset.copySource);
+
+        if (!source) {
+          return;
+        }
+
+        const text = buildCopyText(source);
+        if (!text) {
+          return;
+        }
+
+        const defaultLabel = button.dataset.defaultLabel || button.textContent.trim();
+
+        try {
+          await copyText(text);
+          button.textContent = "已复制";
+        } catch {
+          button.textContent = "复制失败";
+        }
+
+        window.setTimeout(() => {
+          button.textContent = defaultLabel;
+        }, 1800);
+      });
+    });
+  })();
+</script>

@@ -1,0 +1,682 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>武夷学院选座界面</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="workspace-shell">
+      <aside class="sidebar">
+        <div class="sidebar-brand">
+          <h1>预约控制台</h1>
+          <p class="sidebar-text" id="accountConfigPath">配置文件：config.json</p>
+        </div>
+
+        <nav class="sidebar-nav">
+          <button class="menu-button is-active" type="button" data-view-target="reserve">
+            <span class="menu-title">选座预约</span>
+            <span class="menu-desc">查询与选座</span>
+          </button>
+          <button class="menu-button" type="button" data-view-target="tasks">
+            <span class="menu-title">自动任务</span>
+            <span class="menu-desc">预约、签到、签退</span>
+          </button>
+          <button class="menu-button" type="button" data-view-target="status">
+            <span class="menu-title">账号状态</span>
+            <span class="menu-desc">手动签到与签退</span>
+          </button>
+          <button class="menu-button" type="button" data-view-target="accounts">
+            <span class="menu-title">账号管理</span>
+            <span class="menu-desc">新增与编辑</span>
+          </button>
+          <button class="menu-button" type="button" data-view-target="seat-display">
+            <span class="menu-title">座位展示</span>
+            <span class="menu-desc">按自习室查看</span>
+          </button>
+          <button class="menu-button" type="button" data-view-target="debug">
+            <span class="menu-title">调试中心</span>
+            <span class="menu-desc">日志与工具</span>
+          </button>
+        </nav>
+
+        <section class="sidebar-card">
+          <p class="eyebrow">当前账号</p>
+          <h2 id="currentAccountText">正在读取</h2>
+          <div class="hero-badge" id="loginStatus">正在检查登录态</div>
+          <p class="sidebar-text" id="sidebarSummary">未查询座位</p>
+        </section>
+      </aside>
+
+      <section class="content-shell">
+        <section class="view-panel is-active" data-view-panel="reserve">
+          <header class="page-hero">
+            <div>
+              <p class="eyebrow">选座预约</p>
+              <h2>选座预约</h2>
+              <p class="page-hero-text">切换账号并选座后提交。</p>
+            </div>
+            <div class="hero-actions">
+              <button id="searchButton" class="primary-button" type="button">查询可选座位</button>
+            </div>
+          </header>
+
+          <section class="panel">
+            <div class="panel-title">
+              <div>
+                <h3>预约条件</h3>
+              </div>
+            </div>
+            <div class="field-grid">
+              <label class="field">
+                <span>账号</span>
+                <select id="accountSelect"></select>
+              </label>
+              <label class="field">
+                <span>入口页</span>
+                <select id="seatUrlSelect"></select>
+              </label>
+              <label class="field">
+                <span>日期</span>
+                <select id="dateSelect"></select>
+              </label>
+              <label class="field">
+                <span>开始时间</span>
+                <select id="startHourSelect"></select>
+              </label>
+              <label class="field">
+                <span>使用时长</span>
+                <select id="durationSelect"></select>
+              </label>
+              <label class="field">
+                <span>预约人数</span>
+                <select id="peopleCountSelect"></select>
+              </label>
+              <label class="field">
+                <span>自习室</span>
+                <select id="roomSelect" disabled></select>
+              </label>
+            </div>
+            <p class="field-hint" id="peopleHint"></p>
+          </section>
+
+          <div class="two-column-grid">
+            <section class="panel">
+              <div class="panel-title">
+                <div>
+                  <h3>座位号</h3>
+                </div>
+                <label class="search-field">
+                  <span>筛选</span>
+                  <input id="seatFilterInput" type="search" placeholder="输入座位号" />
+                </label>
+              </div>
+              <div class="seat-list" id="seatList"></div>
+            </section>
+
+            <section class="panel action-panel">
+              <div class="selection-card">
+                <p class="eyebrow">当前选择</p>
+                <h3 id="selectionSummary">已选 0/1</h3>
+                <p class="panel-subtitle" id="recommendedSeatSummary">系统推荐座位会在查询后显示。</p>
+                <div class="selected-seat-tags" id="selectedSeatTags"></div>
+              </div>
+              <div class="action-card">
+                <button id="reserveButton" class="primary-button" type="button" disabled>确认预约</button>
+                <p class="field-hint" id="reserveHint">查询到座位后再提交。</p>
+              </div>
+            </section>
+          </div>
+
+          <section class="panel">
+            <div class="panel-title">
+              <div>
+                <h3 id="roomName">还没有查询座位</h3>
+                <p class="panel-subtitle" id="querySummary">请先查询可选座位。</p>
+              </div>
+              <div class="count-badges">
+                <span class="count-chip available" id="availableCount">可选 0</span>
+                <span class="count-chip locked" id="lockedCount">不可选 0</span>
+              </div>
+            </div>
+
+            <div class="legend-list">
+              <span class="legend-item"><i class="legend-dot available"></i>可选</span>
+              <span class="legend-item"><i class="legend-dot locked"></i>不可选</span>
+              <span class="legend-item"><i class="legend-dot recommended"></i>推荐</span>
+              <span class="legend-item"><i class="legend-dot selected"></i>已选</span>
+              <span class="legend-item"><i class="legend-dot socket"></i>插座</span>
+            </div>
+
+            <div class="map-toolbar">
+              <div class="toolbar-group">
+                <button id="zoomOutButton" class="ghost-button" type="button">缩小</button>
+                <button id="zoomResetButton" class="ghost-button" type="button">还原</button>
+                <button id="zoomInButton" class="ghost-button" type="button">放大</button>
+              </div>
+              <span class="zoom-value" id="zoomValue">100%</span>
+            </div>
+
+            <div class="map-frame" id="mapFrame">
+              <div class="map-stage" id="mapStage">
+                <img id="planImage" alt="座位平面图" />
+                <div id="seatLayer"></div>
+              </div>
+            </div>
+            <p class="empty-tip" id="mapEmptyTip">查询后会显示座位图。</p>
+          </section>
+        </section>
+
+        <section class="view-panel" data-view-panel="tasks">
+          <header class="page-hero">
+            <div>
+              <p class="eyebrow">自动任务</p>
+              <h2>自动任务</h2>
+              <p class="page-hero-text" id="taskHint">保持网页服务运行，任务才会自动执行。</p>
+            </div>
+            <div class="hero-actions">
+              <button id="taskCheckReserveButton" class="ghost-button" type="button">手动检查预约</button>
+              <button id="taskUploadButton" class="ghost-button" type="button" disabled>上传自动任务</button>
+              <button id="taskCreateButton" class="primary-button" type="button">新建自动任务</button>
+            </div>
+          </header>
+
+          <section class="panel">
+            <div class="panel-title">
+              <div>
+                <h3>任务列表</h3>
+                <p class="panel-subtitle" id="taskCreateHint">每个账号一张卡片。卡片先看概览，点“更多”再看完整计划和执行信息。</p>
+              </div>
+            </div>
+            <div class="task-list" id="taskList"></div>
+          </section>
+        </section>
+
+        <section class="view-panel" data-view-panel="status">
+          <header class="page-hero">
+            <div>
+              <p class="eyebrow">账号状态</p>
+              <h2>账号状态</h2>
+              <p class="page-hero-text">集中查看每个账号的预约状态，并提供手动签到、签退和取消预约。</p>
+            </div>
+            <div class="hero-actions">
+              <button id="accountCheckinAllButton" class="ghost-button" type="button">一键签到所有账号</button>
+              <button id="taskStatusButton" class="primary-button" type="button">一键获取账号状态</button>
+            </div>
+          </header>
+
+          <section class="panel">
+            <div class="panel-title">
+              <div>
+                <h3>账号状态列表</h3>
+                <p class="panel-subtitle" id="taskStatusSummary">账号会先直接出现在这里，每天 08:30 或手动获取后再更新状态。</p>
+              </div>
+            </div>
+            <div class="task-status-list" id="taskStatusList"></div>
+          </section>
+        </section>
+
+        <section class="view-panel" data-view-panel="accounts">
+          <header class="page-hero">
+            <div>
+              <p class="eyebrow">账号管理</p>
+              <h2>账号管理</h2>
+              <p class="page-hero-text">没有账号也可以先空着；需要预约时，再用弹窗补一个账号就行。</p>
+            </div>
+            <div class="hero-actions">
+              <button id="accountStatusRefreshButton" class="primary-button" type="button">一键获取登录状态</button>
+              <button id="accountBulkImportButton" class="ghost-button" type="button">批量导入</button>
+              <button id="accountBulkActionButton" class="ghost-button" type="button">批量操作</button>
+              <button id="accountDeleteSelectedButton" class="ghost-button" type="button" hidden disabled>删除选中</button>
+              <button id="accountResetButton" class="ghost-button" type="button">新建账号</button>
+            </div>
+          </header>
+
+          <section class="panel sync-panel">
+            <div class="panel-title">
+              <div>
+                <h3>从服务端同步活跃池</h3>
+                <p class="panel-subtitle" id="syncStateLabel">正在读取连接状态…</p>
+              </div>
+              <div class="sync-actions">
+                <span class="sync-state-chip" id="syncStateChip" data-sync-state="">正在检查</span>
+                <button id="serverSyncConfigButton" class="ghost-button" type="button">配置服务端</button>
+                <button id="manualUploadButton" class="ghost-button" type="button" disabled>上传到服务端</button>
+                <button id="manualSyncButton" class="primary-button" type="button" disabled>从服务端同步活跃池</button>
+              </div>
+            </div>
+            <p class="field-hint" id="syncHint">点击按钮后会拉取服务端活跃池清单，并按账号弹出二次确认。</p>
+          </section>
+
+          <section class="panel">
+            <div class="panel-title">
+              <div>
+                <h3>账号列表</h3>
+                <p class="panel-subtitle" id="accountListSummary">正在读取账号列表。</p>
+              </div>
+            </div>
+            <div class="account-list" id="accountList"></div>
+          </section>
+        </section>
+
+        <section class="view-panel" data-view-panel="seat-display">
+          <header class="page-hero">
+            <div>
+              <p class="eyebrow">账号管理</p>
+              <h2>座位展示</h2>
+              <p class="page-hero-text">按自习室汇总当前所有账号的预约和在馆座位。</p>
+            </div>
+            <div class="hero-actions">
+              <button id="seatDisplayRefreshButton" class="primary-button" type="button">刷新预约位置</button>
+            </div>
+          </header>
+
+          <section class="panel">
+            <div class="panel-title">
+              <div>
+                <h3>自习室预约分布</h3>
+                <p class="panel-subtitle" id="seatDisplaySummary">刷新账号状态后，这里会按自习室展示账号座位。</p>
+              </div>
+            </div>
+            <div class="seat-display-list" id="seatDisplayList"></div>
+          </section>
+        </section>
+
+        <section class="view-panel" data-view-panel="debug">
+          <header class="page-hero">
+            <div>
+              <p class="eyebrow">调试中心</p>
+              <h2>调试中心</h2>
+              <p class="page-hero-text">集中查看最近请求、当前状态和排障日志。</p>
+            </div>
+            <div class="hero-actions debug-hero-actions">
+              <button id="debugRefreshBootstrapButton" class="ghost-button" type="button">重新读取入口</button>
+              <button id="debugRetrySearchButton" class="ghost-button" type="button">重新查询座位</button>
+              <button id="debugCopySnapshotButton" class="ghost-button" type="button">复制状态快照</button>
+              <button id="debugClearLogsButton" class="primary-button" type="button">清空日志</button>
+            </div>
+          </header>
+
+          <section class="panel">
+            <div class="panel-title">
+              <div>
+                <h3>调试摘要</h3>
+                <p class="panel-subtitle">先看当前账号、入口、查询状态和最近一次接口请求。</p>
+              </div>
+            </div>
+            <div class="debug-overview-grid">
+              <article class="debug-stat-card">
+                <span class="debug-stat-label">当前账号</span>
+                <strong class="debug-stat-value" id="debugAccountValue">--</strong>
+                <p class="debug-stat-meta" id="debugLoginStateValue">正在读取</p>
+              </article>
+              <article class="debug-stat-card">
+                <span class="debug-stat-label">当前入口</span>
+                <strong class="debug-stat-value" id="debugSeatUrlValue">--</strong>
+                <p class="debug-stat-meta" id="debugSeatUrlMeta">等待载入</p>
+              </article>
+              <article class="debug-stat-card">
+                <span class="debug-stat-label">查询状态</span>
+                <strong class="debug-stat-value" id="debugQueryStateValue">未查询</strong>
+                <p class="debug-stat-meta" id="debugQueryMeta">还没有查询结果</p>
+              </article>
+              <article class="debug-stat-card">
+                <span class="debug-stat-label">最近请求</span>
+                <strong class="debug-stat-value" id="debugLastRequestValue">暂无</strong>
+                <p class="debug-stat-meta" id="debugLastRequestMeta">等待操作</p>
+              </article>
+            </div>
+          </section>
+
+          <div class="two-column-grid debug-grid">
+            <section class="panel">
+              <div class="panel-title">
+                <div>
+                  <h3>最近请求</h3>
+                  <p class="panel-subtitle">这里会记录最近一次主动操作对应的接口请求和返回。</p>
+                </div>
+              </div>
+              <div class="debug-request-card">
+                <div class="debug-request-head">
+                  <div>
+                    <strong id="debugRequestTitle">还没有接口请求</strong>
+                    <p class="debug-request-subtitle" id="debugRequestStatus">执行读取或查询后会显示。</p>
+                  </div>
+                  <span class="status-badge" id="debugRequestBadge">等待中</span>
+                </div>
+                <div class="debug-keyvalue-list" id="debugRequestFacts"></div>
+                <div class="debug-code-block">
+                  <div class="debug-code-title">请求体</div>
+                  <pre id="debugRequestBody">--</pre>
+                </div>
+                <div class="debug-code-block">
+                  <div class="debug-code-title">响应体</div>
+                  <pre id="debugResponseBody">--</pre>
+                </div>
+              </div>
+            </section>
+
+            <section class="panel">
+              <div class="panel-title">
+                <div>
+                  <h3>当前状态快照</h3>
+                  <p class="panel-subtitle">复制这份快照发给我，可以更快定位问题。</p>
+                </div>
+              </div>
+              <div class="debug-code-block debug-code-block-tall">
+                <div class="debug-code-title">状态 JSON</div>
+                <pre id="debugSnapshot">正在生成快照...</pre>
+              </div>
+            </section>
+
+            <section class="panel debug-log-panel">
+              <div class="panel-title">
+                <div>
+                  <h3>操作日志</h3>
+                  <p class="panel-subtitle">按时间倒序记录最近的界面提示、请求结果和异常。</p>
+                </div>
+              </div>
+              <div class="debug-log-list" id="debugLogList"></div>
+            </section>
+          </div>
+        </section>
+      </section>
+    </main>
+
+    <dialog class="task-dialog" id="taskDialog">
+      <div class="task-dialog-surface">
+        <div class="task-dialog-head">
+          <div>
+            <p class="eyebrow" id="taskDialogEyebrow">自动计划</p>
+            <h3 id="taskDialogTitle">预约、签到、签退一次设置</h3>
+            <p class="panel-subtitle" id="taskDialogHint">默认会按当前选中的座位和时间创建计划。</p>
+          </div>
+          <div class="task-dialog-head-actions">
+            <button id="taskDialogCloseButton" class="ghost-button" type="button">关闭</button>
+          </div>
+        </div>
+        <p class="task-dialog-feedback" id="taskDialogFeedback" hidden></p>
+
+        <div class="task-dialog-grid">
+          <label class="field">
+            <span>任务账号</span>
+            <select id="taskDialogAccountSelect"></select>
+          </label>
+          <label class="field">
+            <span>预约日期</span>
+            <select id="taskDialogDateSelect"></select>
+          </label>
+          <label class="field">
+            <span>开始时间</span>
+            <select id="taskDialogStartHourSelect"></select>
+          </label>
+          <label class="field">
+            <span>使用时长</span>
+            <select id="taskDialogDurationSelect"></select>
+          </label>
+          <label class="field">
+            <span>自习室</span>
+            <select id="taskDialogRoomSelect" disabled></select>
+          </label>
+          <label class="field">
+            <span>座位号</span>
+            <input id="taskDialogSeatNumberInput" type="text" inputmode="numeric" placeholder="例如：58" />
+            <span class="field-hint" id="taskDialogSeatNumberHint">打开弹窗后会自动后台查询，也可以直接输入座位号。</span>
+          </label>
+        </div>
+
+        <div class="task-toggle-grid">
+          <label class="task-toggle">
+            <input id="taskDialogReserveEnabled" type="checkbox" checked />
+            <span>启用自动预约</span>
+          </label>
+          <label class="task-toggle">
+            <input id="taskDialogCheckinEnabled" type="checkbox" checked />
+            <span>启用自动签到</span>
+          </label>
+          <label class="task-toggle">
+            <input id="taskDialogCheckoutEnabled" type="checkbox" checked />
+            <span>启用自动签退</span>
+          </label>
+          <label class="task-toggle">
+            <input id="taskDialogContinuousCheckbox" type="checkbox" />
+            <span>持续预约到后续日期（后续日期按学校默认开馆时段补订）</span>
+          </label>
+        </div>
+
+        <div class="task-grid task-dialog-time-grid">
+          <label class="field">
+            <span>预约执行时间</span>
+            <input id="taskDialogReserveTimeInput" type="time" />
+          </label>
+          <label class="field">
+            <span>签到时间</span>
+            <input id="taskDialogCheckinTimeInput" type="time" />
+          </label>
+          <label class="field">
+            <span>签退时间</span>
+            <input id="taskDialogCheckoutTimeInput" type="time" value="21:59" />
+          </label>
+        </div>
+
+        <div class="task-plan-callout task-dialog-preview-grid">
+          <article class="task-plan-card task-dialog-query-card">
+            <div class="task-dialog-query-head">
+              <strong>当前查询</strong>
+              <button id="taskDialogRefreshButton" class="ghost-button" type="button">刷新查询</button>
+            </div>
+            <p id="taskDialogQuerySummary">打开弹窗后会自动查询当前账号可选座位。</p>
+          </article>
+          <article class="task-plan-card">
+            <strong>当前座位</strong>
+            <p id="taskDialogSeatSummary">还没有选中座位。</p>
+          </article>
+          <article class="task-plan-card">
+            <strong>任务预览</strong>
+            <p id="taskDialogPlanSummary">打开弹窗后会自动生成当前任务预览。</p>
+          </article>
+        </div>
+
+        <div class="form-actions">
+          <button id="taskDialogCancelButton" class="ghost-button" type="button">取消</button>
+          <button id="taskDialogSubmitButton" class="primary-button" type="button">创建自动任务</button>
+        </div>
+      </div>
+    </dialog>
+
+    <dialog class="task-dialog" id="accountDialog">
+      <div class="task-dialog-surface">
+        <div class="task-dialog-head">
+          <div>
+            <p class="eyebrow" id="accountDialogEyebrow">账号管理</p>
+            <h3 id="accountEditorTitle">新建账号</h3>
+            <p class="panel-subtitle" id="accountDialogHint">默认使用武夷学院图书馆登录入口和自习室入口。</p>
+          </div>
+          <div class="task-dialog-head-actions">
+            <button id="accountDialogCloseButton" class="ghost-button" type="button">关闭</button>
+          </div>
+        </div>
+
+        <div class="field-grid account-field-grid">
+          <label class="field">
+            <span>学号</span>
+            <input id="accountStudentIdInput" type="text" inputmode="numeric" placeholder="例如：20231121130" />
+          </label>
+          <label class="field">
+            <span>密码</span>
+            <input id="accountPasswordInput" type="password" placeholder="留空则默认等于学号" />
+          </label>
+        </div>
+
+        <section class="account-auth-panel">
+          <div class="account-auth-copy">
+            <strong>登录认证</strong>
+            <p class="field-hint account-auth-hint" id="accountAuthHint">
+              填好学号和密码后，直接点击“刷新认证”，程序会自动保存账号并完成登录。
+            </p>
+          </div>
+          <button id="accountRefreshLoginButton" class="ghost-button" type="button">
+            刷新认证
+          </button>
+        </section>
+
+        <div class="form-actions">
+          <button id="accountDialogCancelButton" class="ghost-button" type="button">取消</button>
+          <button id="accountDeleteButton" class="ghost-button" type="button" disabled>删除账号</button>
+          <button id="accountSaveButton" class="primary-button" type="button">保存账号</button>
+        </div>
+        <p class="field-hint" id="accountFormHint">密码留空时默认等于学号。点击“刷新认证”时也会先保存当前账号，再自动获取登录态。</p>
+      </div>
+    </dialog>
+
+    <dialog class="task-dialog" id="accountBulkImportDialog">
+      <div class="task-dialog-surface">
+        <div class="task-dialog-head">
+          <div>
+            <p class="eyebrow">账号管理</p>
+            <h3>批量导入账号</h3>
+            <p class="panel-subtitle">每行一个账号，支持“学号:密码”“学号,密码”“学号 密码”，只填学号时密码默认等于学号。</p>
+          </div>
+          <div class="task-dialog-head-actions">
+            <button id="accountBulkImportCloseButton" class="ghost-button" type="button">关闭</button>
+          </div>
+        </div>
+
+        <label class="field">
+          <span>账号文本</span>
+          <textarea id="accountBulkImportTextInput" rows="8" placeholder="20230001:password"></textarea>
+        </label>
+        <p class="field-hint account-import-result" id="accountBulkImportResult"></p>
+
+        <div class="form-actions">
+          <button id="accountBulkImportCancelButton" class="ghost-button" type="button">取消</button>
+          <button id="accountBulkImportSubmitButton" class="primary-button" type="button">导入账号</button>
+        </div>
+      </div>
+    </dialog>
+
+    <dialog class="task-dialog details-dialog" id="detailsDialog">
+      <div class="task-dialog-surface details-dialog-surface">
+        <div class="task-dialog-head">
+          <div>
+            <p class="eyebrow" id="detailsDialogEyebrow">更多信息</p>
+            <h3 id="detailsDialogTitle">详情</h3>
+            <p class="panel-subtitle" id="detailsDialogHint">这里会展示当前卡片对应的完整信息。</p>
+          </div>
+          <div class="task-dialog-head-actions">
+            <button id="detailsDialogCloseButton" class="ghost-button" type="button">关闭</button>
+          </div>
+        </div>
+        <div class="details-dialog-content" id="detailsDialogContent"></div>
+        <div class="form-actions">
+          <button id="detailsDialogConfirmButton" class="primary-button" type="button">知道了</button>
+        </div>
+      </div>
+    </dialog>
+
+    <dialog class="task-dialog sync-dialog" id="syncDialog">
+      <div class="task-dialog-surface sync-dialog-surface">
+        <div class="task-dialog-head">
+          <div>
+            <p class="eyebrow">同步活跃池</p>
+            <h3>从服务端同步活跃池</h3>
+            <p class="panel-subtitle">按账号勾选要接收的子集；未勾选的账号本次不会被覆盖或移除。</p>
+          </div>
+          <div class="task-dialog-head-actions">
+            <button id="syncDialogCloseButton" class="ghost-button" type="button">关闭</button>
+          </div>
+        </div>
+
+        <div class="sync-summary" id="syncDialogSummary">
+          <span class="sync-chip add">新增 0</span>
+          <span class="sync-chip replace">替换 0</span>
+          <span class="sync-chip remove">移除 0</span>
+        </div>
+
+        <div class="sync-quick-actions">
+          <button id="syncDialogSelectAllButton" class="ghost-button" type="button">全选</button>
+          <button id="syncDialogClearAllButton" class="ghost-button" type="button">全不选</button>
+          <button id="syncDialogInvertButton" class="ghost-button" type="button">反选</button>
+        </div>
+
+        <div class="sync-candidate-list" id="syncDialogCandidateList"></div>
+
+        <p class="field-hint sync-dialog-hint" id="syncDialogHint">弹窗关闭后不会保留勾选状态。</p>
+
+        <div class="form-actions">
+          <button id="syncDialogCancelButton" class="ghost-button" type="button">取消</button>
+          <button id="syncDialogConfirmButton" class="primary-button" type="button">确认覆盖</button>
+        </div>
+      </div>
+    </dialog>
+
+    <dialog class="task-dialog" id="serverSyncConfigDialog">
+      <div class="task-dialog-surface">
+        <div class="task-dialog-head">
+          <div>
+            <p class="eyebrow">账号管理</p>
+            <h3>服务端配置</h3>
+            <p class="panel-subtitle">填好「服务端 URL」，Bearer Token 也可以先留空，后面再补。</p>
+          </div>
+          <div class="task-dialog-head-actions">
+            <button id="serverSyncConfigCloseButton" class="ghost-button" type="button">关闭</button>
+          </div>
+        </div>
+
+        <div class="field-grid server-sync-field-grid">
+          <label class="field server-sync-url-field">
+            <span>服务端 URL（base_url）</span>
+            <input
+              id="serverSyncBaseUrlInput"
+              type="url"
+              inputmode="url"
+              autocomplete="off"
+              spellcheck="false"
+              placeholder="例如：https://server.example.com"
+            />
+          </label>
+          <label class="field server-sync-token-field">
+            <span>Bearer Token</span>
+            <input
+              id="serverSyncBearerTokenInput"
+              type="password"
+              autocomplete="off"
+              spellcheck="false"
+              placeholder="服务端「客户端 Token」页生成的 Token"
+            />
+          </label>
+          <label class="field server-sync-checkbox-field">
+            <span>校验 TLS 证书</span>
+            <input id="serverSyncVerifyTlsInput" type="checkbox" checked />
+          </label>
+          <label class="field server-sync-checkbox-field">
+            <span>启用同步上行（账号上传 / 自动任务上传 / 拉黑事件上报）</span>
+            <input id="serverSyncUploadEnabledInput" type="checkbox" />
+          </label>
+        </div>
+
+        <div class="server-sync-help">
+          <strong>URL 怎么填</strong>
+          <ul>
+            <li>填到协议 + 域名（或 IP）+ 端口为止，例如 <code>https://srv.example.com</code> 或 <code>http://192.168.1.10:5000</code>。</li>
+            <li>不要带 <code>/api/v1</code>、<code>/accounts</code> 之类的路径，也不要带 <code>?key=value</code> 查询串；客户端会自己拼。</li>
+            <li>末尾的 <code>/</code> 会被自动剥掉，<code>https://srv.example.com/</code> 与不带斜杠等价。</li>
+            <li>生产部署强烈建议使用 <code>https://</code>；服务端开启了 426 校验时只能填 <code>https://</code>。</li>
+            <li>本机调试可以填 <code>http://127.0.0.1:5000</code>，并把下方「校验 TLS 证书」取消勾选。</li>
+          </ul>
+          <p class="field-hint">两项都留空时点击「保存」会清除当前服务端配置，回到「未配置服务端」状态，本地任务执行不受影响。</p>
+        </div>
+
+        <div class="form-actions">
+          <button id="serverSyncConfigCancelButton" class="ghost-button" type="button">取消</button>
+          <button id="serverSyncConfigClearButton" class="ghost-button" type="button">清除配置</button>
+          <button id="serverSyncConfigSaveButton" class="primary-button" type="button">保存</button>
+        </div>
+      </div>
+    </dialog>
+
+    <div class="toast" id="toast"></div>
+    <script src="/app.js" defer></script>
+  </body>
+</html>

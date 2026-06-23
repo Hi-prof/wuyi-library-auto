@@ -1,0 +1,57 @@
+<dialog
+  class="account-dialog runtime-log-dialog auto-reservation-log-dialog"
+  id="auto-reservation-log-dialog"
+  data-account-dialog
+  aria-labelledby="auto-reservation-log-dialog-title"
+>
+  <div class="account-dialog-panel">
+    <div class="account-dialog-head">
+      <div>
+        <span class="status-pill muted">补约日志</span>
+        <h3 id="auto-reservation-log-dialog-title">检查并补约日志</h3>
+      </div>
+      <button class="account-dialog-close" type="button" data-account-dialog-close aria-label="关闭补约日志">关闭</button>
+    </div>
+    <div class="account-dialog-content">
+      <form class="auto-reservation-log-toggle" method="post" action="/auto-reservation/logging">
+        <input type="hidden" name="return_to" value="{{ request.url.path }}{% if request.url.query %}?{{ request.url.query }}{% endif %}">
+        <label class="checkbox-row">
+          <input
+            type="checkbox"
+            name="detailed_logging"
+            value="on"
+            {% if auto_reservation_detailed_log_enabled %}checked{% endif %}
+          >
+          开启详细日志（记录已预约覆盖、过期跳过、无效时段等排查信息）
+        </label>
+        <button class="button primary" type="submit">保存日志设置</button>
+      </form>
+      <div class="panel-heading-row compact-heading-row">
+        <div>
+          <h4>最近 {{ auto_reservation_log_limit }} 条自动补约记录</h4>
+          <p class="panel-subtitle">失败原因会始终记录；详细日志开启后会额外记录跳过和已预约原因。</p>
+        </div>
+        <button
+          class="button ghost copy-button"
+          type="button"
+          data-copy-source="auto-reservation-log-list"
+          data-default-label="复制补约日志"
+          {% if not auto_reservation_logs %}disabled{% endif %}
+        >复制补约日志</button>
+      </div>
+      <ul class="log-list auto-reservation-log-list" id="auto-reservation-log-list">
+        {% for item in auto_reservation_logs %}
+        <li class="{{ 'is-success' if item.success else 'is-failed' }}">
+          <strong>{{ format_datetime(item.created_at, default="无时间") }}</strong>
+          <span>账号 #{{ item.account_id }} · {{ "成功/跳过" if item.success else "失败" }} · {{ item.message }}</span>
+          {% if item.payload_json and item.payload_json != "{}" %}
+          <code>{{ item.payload_json }}</code>
+          {% endif %}
+        </li>
+        {% else %}
+        <li class="empty-state">暂无补约日志。执行“检查并补约”后会在这里显示失败原因。</li>
+        {% endfor %}
+      </ul>
+    </div>
+  </div>
+</dialog>

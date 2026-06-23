@@ -1,0 +1,21 @@
+{
+  "default_account": "我的账号",
+  "max_attempts": 2,
+  "retry_wait_seconds": 2,
+  "accounts": [
+    {
+      "name": "我的账号",
+      "student_id": "20231121130",
+      "password": "你的密码",
+      "login_url": "https://wuyiu.huitu.zhishulib.com/#!/Space/Category/list",
+      "state_file": "runtime/auth-main.json",
+      "seat_urls": [
+        "https://wuyiu.huitu.zhishulib.com/#!/Space/Category/list"
+      ],
+      "preferred_seat_numbers": [
+        "166",
+        "168"
+      ]
+    }
+  ]
+}
