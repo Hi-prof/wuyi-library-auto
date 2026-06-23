@@ -1,0 +1,1117 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="hero-panel compact account-page-hero">
+  <div>
+    <h2>号池管理</h2>
+    {% if daily_status_refresh_label %}
+    <p class="hero-copy">{{ daily_status_refresh_label }}</p>
+    {% endif %}
+  </div>
+  <div class="account-page-actions">
+    <form method="post" action="/accounts/check-first-enabled">
+      <button class="button ghost" type="submit" title="对所有启用账号执行一次预约位置检测">刷新预约位置</button>
+    </form>
+    <form
+      method="post"
+      action="/accounts/run-rolling-reservation"
+      data-confirm-message="确认立刻检查预约？检查后没有预约的时段会自动补上。"
+    >
+      <input type="hidden" name="return_to" value="/accounts">
+      <button
+        class="button primary"
+        type="submit"
+        title="对所有启用账号执行一次检查，缺失的时段会立刻自动预约"
+      >立刻检查并补齐预约</button>
+    </form>
+    <button
+      class="button ghost"
+      type="button"
+      aria-haspopup="dialog"
+      aria-controls="auto-reservation-log-dialog"
+      data-account-dialog-open="auto-reservation-log-dialog"
+    >补约日志</button>
+    <form
+      method="post"
+      action="/accounts/refresh-login-all"
+      data-confirm-message="确认刷新所有账号的登录态？这会逐个获取登录密钥并保存到数据库。"
+    >
+      <button class="button ghost" type="submit" title="获取所有账号的登录密钥并保存到数据库">一键刷新所有登录态</button>
+    </form>
+    <button
+      class="button ghost"
+      type="button"
+      aria-haspopup="dialog"
+      aria-controls="bulk-delete-dialog"
+      data-account-dialog-open="bulk-delete-dialog"
+    >批量删除</button>
+    <button
+      class="button ghost"
+      type="button"
+      aria-haspopup="dialog"
+      aria-controls="generate-task-dialog"
+      data-account-dialog-open="generate-task-dialog"
+    >按当前预约创建自动任务</button>
+    <button
+      class="button ghost"
+      type="button"
+      aria-haspopup="dialog"
+      aria-controls="runtime-log-dialog"
+      data-account-dialog-open="runtime-log-dialog"
+    >运行日志</button>
+    <button
+      class="button primary"
+      type="button"
+      aria-haspopup="dialog"
+      aria-controls="new-account-dialog"
+      data-account-dialog-open="new-account-dialog"
+    >新增账号</button>
+  </div>
+</section>
+
+{% include "_auto_reservation_log_dialog.html" %}
+
+<dialog
+  class="account-dialog runtime-log-dialog"
+  id="runtime-log-dialog"
+  data-account-dialog
+  aria-labelledby="runtime-log-dialog-title"
+>
+  <div class="account-dialog-panel">
+    <div class="account-dialog-head">
+      <div>
+        <span class="status-pill muted">运行日志</span>
+        <h3 id="runtime-log-dialog-title">巡检和取消记录</h3>
+      </div>
+      <button class="account-dialog-close" type="button" data-account-dialog-close aria-label="关闭运行日志">关闭</button>
+    </div>
+    <section class="split-grid">
+      <article class="account-dialog-log-card">
+        <div class="panel-heading-row compact-heading-row">
+          <h4>动作日志</h4>
+          <button
+            class="button ghost copy-button"
+            type="button"
+            data-copy-source="action-log-list"
+            data-default-label="复制动作日志"
+            {% if not action_logs %}disabled{% endif %}
+          >复制动作日志</button>
+        </div>
+        <ul class="log-list" id="action-log-list">
+          {% for item in action_logs %}
+          <li><strong>{{ format_datetime(item.created_at, default="无时间") }}</strong><span>{{ item.action_type }} · {{ "成功" if item.success else "失败" }} · {{ item.message }}</span></li>
+          {% else %}
+          <li class="empty-state">暂无动作日志。</li>
+          {% endfor %}
+        </ul>
+      </article>
+      <article class="account-dialog-log-card">
+        <div class="panel-heading-row compact-heading-row">
+          <h4>巡检记录</h4>
+          <button
+            class="button ghost copy-button"
+            type="button"
+            data-copy-source="monitor-log-list"
+            data-default-label="复制巡检记录"
+            {% if not monitor_records %}disabled{% endif %}
+          >复制巡检记录</button>
+        </div>
+        <ul class="log-list" id="monitor-log-list">
+          {% for item in monitor_records %}
+          <li><strong>{{ format_datetime(item.detected_at, default="无时间") }}</strong><span>{{ item.decision }} · {{ item.detail }}{% if item.booking_id %} · booking {{ item.booking_id }}{% endif %}</span></li>
+          {% else %}
+          <li class="empty-state">暂无巡检记录。</li>
+          {% endfor %}
+        </ul>
+      </article>
+    </section>
+  </div>
+</dialog>
+
+<dialog
+  class="account-dialog new-account-dialog"
+  id="new-account-dialog"
+  data-account-dialog
+  aria-labelledby="new-account-dialog-title"
+>
+  <div class="account-dialog-panel">
+    <div class="account-dialog-head">
+      <div>
+        <span class="status-pill muted">新增</span>
+        <h3 id="new-account-dialog-title">新增账号</h3>
+      </div>
+      <button
+        class="account-dialog-close"
+        type="button"
+        data-account-dialog-close
+        aria-label="关闭新增账号"
+      >关闭</button>
+    </div>
+
+    <div class="new-account-tabs" role="tablist">
+      <button
+        type="button"
+        class="new-account-tab active"
+        role="tab"
+        aria-selected="true"
+        aria-controls="new-account-panel-bulk"
+        data-new-account-tab="bulk"
+      >批量导入到活跃号池</button>
+      {% if pool_view_available %}
+      <button
+        type="button"
+        class="new-account-tab"
+        role="tab"
+        aria-selected="false"
+        aria-controls="new-account-panel-idle"
+        data-new-account-tab="idle"
+      >导入到未启用池</button>
+      {% endif %}
+    </div>
+
+    <div
+      class="new-account-panel active"
+      id="new-account-panel-bulk"
+      role="tabpanel"
+      data-new-account-panel="bulk"
+    >
+      <form class="form-grid batch-account-form" method="post" action="/accounts/bulk-create">
+        <label class="wide-field">
+          <span>批量导入到活跃号池（每行一个账号）</span>
+          <textarea
+            name="bulk_accounts"
+            rows="8"
+            placeholder="每行一个账号，例如：&#10;20231121130&#10;20231121131 自定义密码"
+          ></textarea>
+        </label>
+        <p class="bulk-import-to-idle-tip">
+          格式：<code>学号</code> 或 <code>学号 密码</code>；密码留空时默认与学号一致。
+          新增后账号直接进入活跃池。
+        </p>
+        <label class="checkbox-row"><input type="checkbox" name="enabled" checked> 启用自动监测</label>
+        <div class="form-actions">
+          <button class="button primary" type="submit">批量导入到活跃号池</button>
+        </div>
+      </form>
+    </div>
+
+    {# account-pool-tri-sync · task 9.2：批量导入未启用池（粘贴 / 上传 CSV）。 #}
+    {# Pool 服务未装配时（缺少 ACCOUNT_POOL_SECRET_KEY）该区块不渲染。 #}
+    {% if pool_view_available %}
+    <div
+      class="new-account-panel"
+      id="new-account-panel-idle"
+      role="tabpanel"
+      data-new-account-panel="idle"
+      hidden
+    >
+      <p class="bulk-import-to-idle-hint">
+        必填：<code>student_id</code>；<code>password</code> 留空时默认与学号一致。
+        可选：<code>display_name</code> / <code>note</code> /
+        <code>default_room_name</code> / <code>default_seat_number</code>。
+        导入后账号进入未启用池，迁到活跃池需要二次确认。
+      </p>
+      <div class="bulk-import-to-idle-tabs" role="tablist">
+        <button
+          type="button"
+          class="bulk-import-to-idle-tab active"
+          role="tab"
+          aria-selected="true"
+          aria-controls="bulk-import-to-idle-panel-paste"
+          data-bulk-import-tab="paste"
+        >粘贴</button>
+        <button
+          type="button"
+          class="bulk-import-to-idle-tab"
+          role="tab"
+          aria-selected="false"
+          aria-controls="bulk-import-to-idle-panel-csv"
+          data-bulk-import-tab="csv"
+        >上传 CSV</button>
+      </div>
+
+      <div
+        class="bulk-import-to-idle-panel active"
+        id="bulk-import-to-idle-panel-paste"
+        role="tabpanel"
+        data-bulk-import-panel="paste"
+      >
+        <form
+          class="form-grid bulk-import-to-idle-form"
+          method="post"
+          action="/accounts/bulk-import-to-idle"
+          enctype="application/x-www-form-urlencoded"
+        >
+          <input type="hidden" name="mode" value="paste">
+          <label class="wide-field">
+            <span>粘贴一行一个账号（空格或逗号分隔字段）</span>
+            <textarea
+              name="paste_text"
+              rows="7"
+              placeholder="20231121130&#10;20231121131,my-pass-2,二号 备注 自习室A 18&#10;20231121132 my-pass-3"
+            ></textarea>
+          </label>
+          <p class="bulk-import-to-idle-tip">
+            字段顺序：<code>student_id</code> · <code>password</code> ·
+            <code>display_name</code> · <code>note</code> ·
+            <code>default_room_name</code> · <code>default_seat_number</code>。
+          </p>
+          <div class="form-actions">
+            <button class="button primary" type="submit">导入到未启用池</button>
+          </div>
+        </form>
+      </div>
+
+      <div
+        class="bulk-import-to-idle-panel"
+        id="bulk-import-to-idle-panel-csv"
+        role="tabpanel"
+        data-bulk-import-panel="csv"
+        hidden
+      >
+        <form
+          class="form-grid bulk-import-to-idle-form"
+          method="post"
+          action="/accounts/bulk-import-to-idle"
+          enctype="multipart/form-data"
+        >
+          <input type="hidden" name="mode" value="csv">
+          <label class="wide-field">
+            <span>上传 CSV 文件（首行可选表头）</span>
+            <input type="file" name="csv_file" accept=".csv,text/csv" required>
+          </label>
+          <p class="bulk-import-to-idle-tip">
+            列顺序：<code>student_id,password,display_name,note,default_room_name,default_seat_number</code>。
+            存在表头时按列名匹配，否则按位置解析。
+          </p>
+          <div class="form-actions">
+            <button class="button primary" type="submit">上传并导入</button>
+          </div>
+        </form>
+      </div>
+    </div>
+    {% endif %}
+  </div>
+</dialog>
+
+<dialog
+  class="account-dialog batch-account-dialog"
+  id="bulk-delete-dialog"
+  data-account-dialog
+  aria-labelledby="bulk-delete-dialog-title"
+>
+  <div class="account-dialog-panel">
+    <div class="account-dialog-head">
+      <div>
+        <span class="status-pill muted">批量删除</span>
+        <h3 id="bulk-delete-dialog-title">批量删除账号</h3>
+      </div>
+      <button
+        class="account-dialog-close"
+        type="button"
+        data-account-dialog-close
+        aria-label="关闭批量删除"
+      >关闭</button>
+    </div>
+    <form
+      class="batch-delete-form"
+      method="post"
+      action="/accounts/bulk-delete"
+      data-confirm-message="确认删除选中的账号？相关巡检记录和动作日志也会删除。"
+    >
+      <div class="batch-delete-list">
+        {% for account in all_accounts %}
+        <label class="batch-delete-item">
+          <input type="checkbox" name="account_ids" value="{{ account.id }}">
+          <span>{{ account.student_id }}</span>
+          <small>{{ account.name }}</small>
+        </label>
+        {% else %}
+        <p class="empty-state">当前还没有可删除的账号。</p>
+        {% endfor %}
+      </div>
+      <div class="form-actions">
+        <button class="button danger" type="submit" {% if not all_accounts %}disabled{% endif %}>删除选中账号</button>
+        <button class="button ghost" type="button" data-account-dialog-close>取消</button>
+      </div>
+    </form>
+  </div>
+</dialog>
+
+<dialog
+  class="account-dialog batch-account-dialog"
+  id="generate-task-dialog"
+  data-account-dialog
+  aria-labelledby="generate-task-dialog-title"
+>
+  <div class="account-dialog-panel">
+    <div class="account-dialog-head">
+      <div>
+        <span class="status-pill muted">自动任务</span>
+        <h3 id="generate-task-dialog-title">按当前预约创建自动任务</h3>
+      </div>
+      <button
+        class="account-dialog-close"
+        type="button"
+        data-account-dialog-close
+        aria-label="关闭按当前预约创建自动任务"
+      >关闭</button>
+    </div>
+    <form
+      class="batch-delete-form"
+      method="post"
+      action="/accounts/generate-tasks-from-bookings"
+      data-confirm-message="确认按当前预约为选中账号生成自动任务？已存在的同座位任务会合并小时模板。"
+    >
+      <input type="hidden" name="return_to" value="/accounts">
+      <p class="bulk-import-to-idle-tip">
+        会先刷新选中账号的预约视图，再按 <code>(自习室, 座位号, 起止小时)</code>
+        推导自动任务；未签到 / 已签到 / 待签到的预约都会参与。
+        <strong>已经存在自动任务的账号默认不勾选</strong>，可手动勾上做合并。
+      </p>
+      {% if task_generation_candidates %}
+      <div class="batch-delete-toolbar">
+        <button
+          class="button ghost"
+          type="button"
+          data-batch-select-all="task-generation"
+        >全选</button>
+        <button
+          class="button ghost"
+          type="button"
+          data-batch-select-none="task-generation"
+        >全不选</button>
+        <button
+          class="button ghost"
+          type="button"
+          data-batch-select-invert="task-generation"
+        >反选</button>
+        <button
+          class="button ghost"
+          type="button"
+          data-batch-select-without-tasks="task-generation"
+        >只选未配置过的</button>
+      </div>
+      <div class="batch-delete-list" data-batch-select-group="task-generation">
+        {% for candidate in task_generation_candidates %}
+        {% set has_existing = candidate.accountId in task_generation_existing_account_ids %}
+        <label class="batch-delete-item">
+          <input
+            type="checkbox"
+            name="account_ids"
+            value="{{ candidate.accountId }}"
+            data-has-existing-task="{{ 'true' if has_existing else 'false' }}"
+            {% if not has_existing %}checked{% endif %}
+          >
+          <span>{{ candidate.studentId }}</span>
+          <small>
+            {{ candidate.displayName }}
+            {% if has_existing %}<em>· 已有自动任务</em>{% endif %}
+          </small>
+        </label>
+        {% endfor %}
+      </div>
+      <div class="form-actions">
+        <button class="button primary" type="submit">按当前预约生成自动任务</button>
+        <button class="button ghost" type="button" data-account-dialog-close>取消</button>
+      </div>
+      {% else %}
+      <p class="empty-state">活跃池暂无账号，先把账号迁到活跃池再来生成。</p>
+      <div class="form-actions">
+        <button class="button ghost" type="button" data-account-dialog-close>关闭</button>
+      </div>
+      {% endif %}
+    </form>
+  </div>
+</dialog>
+
+{# 号池管理：详情 / 编辑 / 日志弹窗按当前池过滤后的 ``accounts`` 列表渲染。 #}
+{% set snapshot_mode = false %}
+{% set items = accounts %}
+
+{# 号池服务未装配时的兜底空态：常规情况下由号池 Tab 区块负责空态展示。 #}
+{% if not pool_view_available and not items %}
+<section class="account-management-grid account-mini-grid">
+  <p class="empty-state panel">当前还没有账号，先新增一个。</p>
+</section>
+{% endif %}
+
+{# 详情 / 编辑 / 日志弹窗：每个账号一组，按当前池过滤后的 accounts 渲染。 #}
+{% for account in items %}
+{% set detail_account = account_details_by_id[account.id] if snapshot_mode else account %}
+{% set monitor_records = monitor_records_by_account.get(account.id, []) %}
+{% set account_action_logs = action_logs_by_account.get(account.id, []) %}
+<dialog
+  class="account-dialog"
+  id="account-dialog-{{ account.id }}"
+  data-account-dialog
+  aria-labelledby="account-dialog-title-{{ account.id }}"
+>
+  <div class="account-dialog-panel">
+    <div class="account-dialog-head">
+      <div>
+        <span class="status-pill {{ 'success' if account.enabled else 'danger' }}">{{ account.enabledLabel if snapshot_mode else ("启用中" if account.enabled else "已停用") }}</span>
+        <h3 id="account-dialog-title-{{ account.id }}">
+          {{ account.studentId if snapshot_mode else account.student_id }}
+        </h3>
+      </div>
+      <button
+        class="account-dialog-close"
+        type="button"
+        data-account-dialog-close
+        aria-label="关闭详情"
+      >关闭</button>
+    </div>
+    <div class="account-dialog-content">
+      <div class="account-detail-summary-grid account-dialog-summary-grid">
+        <article class="account-highlight-card">
+          <span>最近检测</span>
+          <strong>{{ account.lastCheckLabel if snapshot_mode else format_datetime(account.last_check_at, default="尚未检测") }}</strong>
+        </article>
+        <article class="account-highlight-card wide">
+          <span>当前状态</span>
+          <strong>{{ account.currentStatus if snapshot_mode else (account.last_status or "暂无状态") }}</strong>
+        </article>
+        <article class="account-highlight-card">
+          <span>预约座位</span>
+          <strong>
+            {% if snapshot_mode %}
+            {{ account.seatLabel }}
+            {% elif account.last_detected_room_name and account.last_detected_seat_number %}
+            {{ format_room_seat(account.last_detected_room_name, account.last_detected_seat_number) }}
+            {% else %}
+            未识别到预约座位
+            {% endif %}
+          </strong>
+        </article>
+        <article class="account-highlight-card">
+          <span>登录入口</span>
+          <strong>{{ "已配置" if detail_account.login_url else "未配置" }}</strong>
+        </article>
+      </div>
+      <div class="account-device-actions">
+        <form method="post" action="/accounts/{{ account.id }}/check-now"><button class="button primary" type="submit">立即检测</button></form>
+        <form method="post" action="/accounts/{{ account.id }}/cancel-current" data-confirm-message="确认取消当前可取消的预约？"><button class="button danger" type="submit">取消当前预约</button></form>
+        <form method="post" action="/accounts/{{ account.id }}/refresh-login"><button class="button ghost" type="submit">刷新登录态</button></form>
+        <button
+          class="button ghost"
+          type="button"
+          aria-haspopup="dialog"
+          aria-controls="account-edit-dialog-{{ account.id }}"
+          data-account-dialog-open="account-edit-dialog-{{ account.id }}"
+        >编辑账号</button>
+        <form method="post" action="/accounts/{{ account.id }}/delete" data-confirm-message="确认删除这个账号？相关巡检记录和动作日志也会删除。"><button class="button danger" type="submit">删除账号</button></form>
+      </div>
+      <div class="account-dialog-log-grid">
+        <article class="account-dialog-log-card">
+          <h4>最近巡检</h4>
+          <ul class="log-list compact-log-list">
+            {% for item in monitor_records[:3] %}
+            <li><strong>{{ format_datetime(item.detected_at, default="无时间") }}</strong><span>{{ item.decision }} · {{ item.detail }}</span></li>
+            {% else %}
+            <li class="empty-state">还没有巡检记录。</li>
+            {% endfor %}
+          </ul>
+        </article>
+        <article class="account-dialog-log-card">
+          <div class="panel-heading-row compact-heading-row">
+            <h4>动作日志</h4>
+            <button
+              class="button ghost copy-button"
+              type="button"
+              aria-haspopup="dialog"
+              aria-controls="account-log-dialog-{{ account.id }}"
+              data-account-dialog-open="account-log-dialog-{{ account.id }}"
+            >查看日志</button>
+          </div>
+          <ul class="log-list compact-log-list">
+            {% for item in account_action_logs[:2] %}
+            <li><strong>{{ format_datetime(item.created_at, default="无时间") }}</strong><span>{{ item.action_type }} · {{ "成功" if item.success else "失败" }} · {{ item.message }}</span></li>
+            {% else %}
+            <li class="empty-state">还没有动作日志。</li>
+            {% endfor %}
+          </ul>
+        </article>
+      </div>
+    </div>
+  </div>
+</dialog>
+<dialog
+  class="account-dialog account-edit-dialog"
+  id="account-edit-dialog-{{ account.id }}"
+  data-account-dialog
+  aria-labelledby="account-edit-dialog-title-{{ account.id }}"
+>
+  <div class="account-dialog-panel">
+    <div class="account-dialog-head">
+      <div>
+        <span class="status-pill muted">编辑账号</span>
+        <h3 id="account-edit-dialog-title-{{ account.id }}">{{ detail_account.student_id }}</h3>
+      </div>
+      <button class="account-dialog-close" type="button" data-account-dialog-close aria-label="关闭编辑账号">关闭</button>
+    </div>
+    <form class="form-grid" method="post" action="/accounts/{{ account.id }}">
+      <label><span>学号</span><input name="student_id" required value="{{ detail_account.student_id }}"></label>
+      <label><span>密码</span><input name="password" type="password" autocomplete="new-password" placeholder="留空时默认和学号一致"></label>
+      <label class="checkbox-row"><input type="checkbox" name="enabled" {% if detail_account.enabled %}checked{% endif %}> 启用自动监测</label>
+      <div class="form-actions">
+        <button class="button ghost" type="submit">保存账号</button>
+        <button class="button ghost" type="button" data-account-dialog-close>取消</button>
+      </div>
+    </form>
+  </div>
+</dialog>
+<dialog
+  class="account-dialog account-log-dialog"
+  id="account-log-dialog-{{ account.id }}"
+  data-account-dialog
+  aria-labelledby="account-log-dialog-title-{{ account.id }}"
+>
+  <div class="account-dialog-panel">
+    <div class="account-dialog-head">
+      <div>
+        <span class="status-pill muted">日志</span>
+        <h3 id="account-log-dialog-title-{{ account.id }}">{{ account.studentId if snapshot_mode else account.student_id }}</h3>
+      </div>
+      <button class="account-dialog-close" type="button" data-account-dialog-close aria-label="关闭日志">关闭</button>
+    </div>
+    <section class="split-grid">
+      <article class="account-dialog-log-card">
+        <h4>最近巡检</h4>
+        <ul class="log-list">
+          {% for item in monitor_records %}
+          <li><strong>{{ format_datetime(item.detected_at, default="无时间") }}</strong><span>{{ item.decision }} · {{ item.detail }}</span></li>
+          {% else %}
+          <li class="empty-state">还没有巡检记录。</li>
+          {% endfor %}
+        </ul>
+      </article>
+      <article class="account-dialog-log-card">
+        <h4>动作日志</h4>
+        <ul class="log-list">
+          {% for item in account_action_logs %}
+          <li><strong>{{ format_datetime(item.created_at, default="无时间") }}</strong><span>{{ item.action_type }} · {{ "成功" if item.success else "失败" }} · {{ item.message }}</span></li>
+          {% else %}
+          <li class="empty-state">还没有动作日志。</li>
+          {% endfor %}
+        </ul>
+      </article>
+    </section>
+  </div>
+</dialog>
+{% endfor %}
+
+{# 号池管理：把三池 Tab + 表格主视图统一渲染。 #}
+{# 服务端未装配 AccountPoolService 时不渲染该区块，保持既有 UI 不变。 #}
+{% if pool_view_available %}
+<section class="account-pool-tabs-panel" aria-label="号池管理">
+  <div class="account-pool-tabs" role="tablist">
+    {% for tab in pool_tabs %}
+    <a
+      class="account-pool-tab {{ 'active' if tab.active else '' }}"
+      role="tab"
+      aria-selected="{{ 'true' if tab.active else 'false' }}"
+      href="{{ tab.href }}"
+      data-pool-tab="{{ tab.key }}"
+    >{{ tab.label }} <span class="account-pool-tab-count">{{ tab.count }}</span></a>
+    {% endfor %}
+  </div>
+
+  {# account-pool-tri-sync · task 9.3：未启用池 Tab 顶部「随机抽一个」按钮。 #}
+  {# 仅在选中 Idle Tab 时渲染；点击后 POST /accounts/random-pick，命中后由后端 #}
+  {# 重定向带回 ``random_picked_account_id``，触发下方 modal 弹出（仅展示学号 / 备注）。 #}
+  {% if selected_pool == 'idle' %}
+  <div class="account-pool-tab-actions" data-pool-tab-actions="idle">
+    <form
+      class="account-pool-random-pick-form"
+      method="post"
+      action="/accounts/random-pick"
+    >
+      <button class="button primary" type="submit">随机抽一个</button>
+    </form>
+    <p class="account-pool-random-pick-hint">
+      从未启用池里随机抽一个账号，只展示学号 / 备注，不展示密码；二次确认后才迁到活跃池。
+    </p>
+  </div>
+  {% endif %}
+
+  <div class="account-pool-table-shell" data-pool-current="{{ selected_pool }}">
+    {% if pool_rows %}
+    <table class="account-pool-table">
+      <thead>
+        <tr>
+          <th scope="col">学号</th>
+          <th scope="col">日期</th>
+          <th scope="col">预约座位</th>
+          <th scope="col">预约时间</th>
+          <th scope="col">签到状态</th>
+          {% if selected_pool == 'active' %}
+          <th scope="col">登录态</th>
+          <th scope="col">最近检测</th>
+          {% elif selected_pool == 'suspended' %}
+          <th scope="col">暂停起始</th>
+          <th scope="col">剩余</th>
+          <th scope="col">到期</th>
+          {% elif selected_pool == 'idle' %}
+          <th scope="col">进入未启用</th>
+          <th scope="col">上一次所在池</th>
+          {% endif %}
+          <th scope="col" class="actions-col">操作</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in pool_rows %}
+        {% set snapshot = account_snapshots_by_id.get(row.account_id) %}
+        {% set bookings = bookings_by_account.get(row.account_id, []) if selected_pool == 'active' else [] %}
+        {% set rowspan = bookings|length if bookings|length > 1 else 1 %}
+        {% if bookings %}
+          {% for booking in bookings %}
+          <tr
+            data-pool-row="{{ row.account_id }}"
+            data-booking-row="{{ loop.index0 }}"
+            data-account-group="{{ row.account_id }}"
+            {% if not loop.first %}class="account-pool-extra-row" hidden{% endif %}
+          >
+            {% if loop.first %}
+            <td data-label="学号" class="account-pool-cell-student" rowspan="1" data-rowspan-collapsed="1" data-rowspan-expanded="{{ rowspan }}">
+              <span class="account-pool-student-content">
+                {% if rowspan > 1 %}
+                <button
+                  type="button"
+                  class="account-pool-toggle"
+                  data-account-pool-toggle="{{ row.account_id }}"
+                  aria-expanded="false"
+                  aria-label="展开 {{ row.student_id }} 的所有预约"
+                >▸</button>
+                {% endif %}
+                <span class="account-pool-student-text">{{ row.student_id }}</span>
+                {% if rowspan > 1 %}
+                <span class="account-pool-booking-count">共 {{ rowspan }} 条</span>
+                {% endif %}
+              </span>
+            </td>
+            {% endif %}
+            <td data-label="日期">{{ booking.date_label }}</td>
+            <td data-label="预约座位">{{ booking.seat_label }}</td>
+            <td data-label="预约时间">{{ booking.time_range_label }}</td>
+            <td data-label="签到状态">
+              <span class="status-pill {{ booking.checkin_status_tone }}">{{ booking.checkin_status_label }}</span>
+            </td>
+            {% if selected_pool == 'active' %}
+              {% if loop.first %}
+              <td data-label="登录态" rowspan="1" data-rowspan-collapsed="1" data-rowspan-expanded="{{ rowspan }}">{{ row.login_status_label }}</td>
+              <td data-label="最近检测" rowspan="1" data-rowspan-collapsed="1" data-rowspan-expanded="{{ rowspan }}">{{ snapshot.lastCheckSimpleLabel if snapshot else '尚未检测' }}</td>
+              {% endif %}
+            {% elif selected_pool == 'suspended' %}
+              {% if loop.first %}
+              <td data-label="暂停起始" rowspan="1" data-rowspan-collapsed="1" data-rowspan-expanded="{{ rowspan }}">{{ row.suspended_at_label or '—' }}</td>
+              <td data-label="剩余" rowspan="1" data-rowspan-collapsed="1" data-rowspan-expanded="{{ rowspan }}">{{ row.remaining_label or '—' }}</td>
+              <td data-label="到期" rowspan="1" data-rowspan-collapsed="1" data-rowspan-expanded="{{ rowspan }}">{{ row.expires_at_label or '—' }}</td>
+              {% endif %}
+            {% elif selected_pool == 'idle' %}
+              {% if loop.first %}
+              <td data-label="进入未启用" rowspan="1" data-rowspan-collapsed="1" data-rowspan-expanded="{{ rowspan }}">{{ row.entered_at_label or '—' }}</td>
+              <td data-label="上一次所在池" rowspan="1" data-rowspan-collapsed="1" data-rowspan-expanded="{{ rowspan }}">{{ row.pool_previous_label }}</td>
+              {% endif %}
+            {% endif %}
+            {% if loop.first %}
+            <td data-label="操作" class="actions-col account-pool-actions-cell" rowspan="1" data-rowspan-collapsed="1" data-rowspan-expanded="{{ rowspan }}">
+              <button
+                class="button ghost"
+                type="button"
+                aria-haspopup="dialog"
+                aria-controls="account-dialog-{{ row.account_id }}"
+                data-account-dialog-open="account-dialog-{{ row.account_id }}"
+              >详情</button>
+              <form method="post" action="/accounts/{{ row.account_id }}/refresh-login">
+                <button
+                  class="button ghost"
+                  type="submit"
+                  aria-label="刷新账号 {{ row.student_id }} 的登录态"
+                >刷新登录态</button>
+              </form>
+              <button
+                class="button ghost"
+                type="button"
+                aria-haspopup="dialog"
+                aria-controls="pool-migrate-dialog-{{ row.account_id }}"
+                data-account-dialog-open="pool-migrate-dialog-{{ row.account_id }}"
+              >迁移</button>
+            </td>
+            {% endif %}
+          </tr>
+          {% endfor %}
+        {% else %}
+        <tr data-pool-row="{{ row.account_id }}">
+          <td data-label="学号" class="account-pool-cell-student">{{ row.student_id }}</td>
+          <td data-label="日期">—</td>
+          <td data-label="预约座位">{{ snapshot.seatLabel if snapshot else '未识别到预约座位' }}</td>
+          <td data-label="预约时间">{{ snapshot.bookingTimeRangeLabel if snapshot else '—' }}</td>
+          <td data-label="签到状态">
+            <span class="status-pill {{ snapshot.checkinStatusTone if snapshot else 'muted' }}">{{ snapshot.checkinStatusLabel if snapshot else '尚未检测' }}</span>
+          </td>
+          {% if selected_pool == 'active' %}
+          <td data-label="登录态">{{ row.login_status_label }}</td>
+          <td data-label="最近检测">{{ snapshot.lastCheckSimpleLabel if snapshot else '尚未检测' }}</td>
+          {% elif selected_pool == 'suspended' %}
+          <td data-label="暂停起始">{{ row.suspended_at_label or '—' }}</td>
+          <td data-label="剩余">{{ row.remaining_label or '—' }}</td>
+          <td data-label="到期">{{ row.expires_at_label or '—' }}</td>
+          {% elif selected_pool == 'idle' %}
+          <td data-label="进入未启用">{{ row.entered_at_label or '—' }}</td>
+          <td data-label="上一次所在池">{{ row.pool_previous_label }}</td>
+          {% endif %}
+          <td data-label="操作" class="actions-col account-pool-actions-cell">
+            <button
+              class="button ghost"
+              type="button"
+              aria-haspopup="dialog"
+              aria-controls="account-dialog-{{ row.account_id }}"
+              data-account-dialog-open="account-dialog-{{ row.account_id }}"
+            >详情</button>
+            <form method="post" action="/accounts/{{ row.account_id }}/refresh-login">
+              <button
+                class="button ghost"
+                type="submit"
+                aria-label="刷新账号 {{ row.student_id }} 的登录态"
+              >刷新登录态</button>
+            </form>
+            <button
+              class="button ghost"
+              type="button"
+              aria-haspopup="dialog"
+              aria-controls="pool-migrate-dialog-{{ row.account_id }}"
+              data-account-dialog-open="pool-migrate-dialog-{{ row.account_id }}"
+            >迁移</button>
+          </td>
+        </tr>
+        {% endif %}
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="empty-state panel">{{ pool_empty_label }}</p>
+    {% endif %}
+  </div>
+
+  {# 跨池迁移弹窗：每行账号一个独立 dialog。 #}
+  {% for row in pool_rows %}
+  <dialog
+    class="account-dialog account-pool-migrate-dialog"
+    id="pool-migrate-dialog-{{ row.account_id }}"
+    data-account-dialog
+    aria-labelledby="pool-migrate-dialog-title-{{ row.account_id }}"
+  >
+    <div class="account-dialog-panel">
+      <div class="account-dialog-head">
+        <div>
+          <span class="status-pill muted">跨池迁移</span>
+          <h3 id="pool-migrate-dialog-title-{{ row.account_id }}">{{ row.student_id }}</h3>
+        </div>
+        <button class="account-dialog-close" type="button" data-account-dialog-close aria-label="关闭跨池迁移">关闭</button>
+      </div>
+      <div class="account-dialog-content">
+        <p class="account-pool-migrate-hint">前端不强制阻止非法迁移，由服务端响应决定（合法路径见说明文档）。</p>
+        <div class="account-pool-migrate-actions">
+          {% for value, label in row.migration_buttons %}
+          <form
+            method="post"
+            action="/accounts/{{ row.account_id }}/migrate"
+            data-confirm-message="确认把账号 {{ row.student_id }} {{ label }}？"
+          >
+            <input type="hidden" name="target_pool" value="{{ value }}">
+            <input type="hidden" name="pool" value="{{ selected_pool }}">
+            <button class="button {{ 'primary' if value == 'active' else 'ghost' }}" type="submit">{{ label }}</button>
+          </form>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+  </dialog>
+  {% endfor %}
+</section>
+{% endif %}
+
+{# account-pool-tri-sync · task 9.3：Random_Pick 模态。 #}
+{# 仅当 GET /accounts?random_picked_account_id=N 且账号仍处于 Idle_Pool 时由后端 #}
+{# 注入 ``random_picked_view``；只展示学号 / 备注，**绝不**展示密码。底部按钮 #}
+{# 复用 /accounts/{id}/migrate 端点，附带 data-confirm-message 二次确认。 #}
+{% if random_picked_view %}
+<dialog
+  class="account-dialog account-pool-random-picked-dialog"
+  id="random-picked-dialog"
+  data-account-dialog
+  data-auto-open="true"
+  aria-labelledby="random-picked-dialog-title"
+>
+  <div class="account-dialog-panel">
+    <div class="account-dialog-head">
+      <div>
+        <span class="status-pill muted">随机抽取</span>
+        <h3 id="random-picked-dialog-title">已从未启用池随机抽中</h3>
+      </div>
+      <button class="account-dialog-close" type="button" data-account-dialog-close aria-label="关闭随机抽取">关闭</button>
+    </div>
+    <div class="account-dialog-content">
+      <dl class="account-pool-random-picked-fields">
+        <dt>学号</dt>
+        <dd>{{ random_picked_view.student_id }}</dd>
+        <dt>备注</dt>
+        <dd>{{ random_picked_view.display_name or '—' }}</dd>
+      </dl>
+      <p class="account-pool-random-picked-hint">
+        Random_Pick 不会自动改变池归属，密码字段不在抽取结果中展示。如需启用，
+        请点击下方按钮二次确认后再迁到活跃池。
+      </p>
+      <div class="account-pool-random-picked-actions">
+        <form
+          method="post"
+          action="/accounts/{{ random_picked_view.account_id }}/migrate"
+          data-confirm-message="{{ random_picked_view.confirm_message }}"
+        >
+          <input type="hidden" name="target_pool" value="{{ random_picked_view.migrate_target }}">
+          <input type="hidden" name="pool" value="idle">
+          <button class="button primary" type="submit">迁入活跃池（二次确认）</button>
+        </form>
+        <button class="button ghost" type="button" data-account-dialog-close>稍后再说</button>
+      </div>
+    </div>
+  </div>
+</dialog>
+{% endif %}
+
+<script>
+  (() => {
+    const openButtons = document.querySelectorAll("[data-account-dialog-open]");
+    const closeButtons = document.querySelectorAll("[data-account-dialog-close]");
+    const dialogs = document.querySelectorAll("[data-account-dialog]");
+    const copyButtons = document.querySelectorAll("[data-copy-source]");
+
+    async function copyText(text) {
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(text);
+        return;
+      }
+
+      const helper = document.createElement("textarea");
+      helper.value = text;
+      helper.setAttribute("readonly", "readonly");
+      helper.style.position = "fixed";
+      helper.style.opacity = "0";
+      document.body.appendChild(helper);
+      helper.select();
+      const copied = document.execCommand("copy");
+      document.body.removeChild(helper);
+
+      if (!copied) {
+        throw new Error("copy failed");
+      }
+    }
+
+    function buildCopyText(list) {
+      return Array.from(list.querySelectorAll("li"))
+        .map((item) => item.textContent.replace(/\s+/g, " ").trim())
+        .filter(Boolean)
+        .join("\n");
+    }
+
+    openButtons.forEach((button) => {
+      button.addEventListener("click", () => {
+        const dialog = document.getElementById(button.dataset.accountDialogOpen);
+
+        if (dialog && typeof dialog.showModal === "function" && !dialog.open) {
+          dialog.showModal();
+        }
+      });
+    });
+
+    closeButtons.forEach((button) => {
+      button.addEventListener("click", () => {
+        const dialog = button.closest("dialog");
+
+        if (dialog && typeof dialog.close === "function") {
+          dialog.close();
+        }
+      });
+    });
+
+    dialogs.forEach((dialog) => {
+      dialog.addEventListener("click", (event) => {
+        if (event.target === dialog && typeof dialog.close === "function") {
+          dialog.close();
+        }
+      });
+    });
+
+    copyButtons.forEach((button) => {
+      button.addEventListener("click", async () => {
+        const source = document.getElementById(button.dataset.copySource);
+
+        if (!source) {
+          return;
+        }
+
+        const text = buildCopyText(source);
+        if (!text) {
+          return;
+        }
+
+        const defaultLabel = button.dataset.defaultLabel || button.textContent.trim();
+
+        try {
+          await copyText(text);
+          button.textContent = "已复制";
+        } catch {
+          button.textContent = "复制失败";
+        }
+
+        window.setTimeout(() => {
+          button.textContent = defaultLabel;
+        }, 1800);
+      });
+    });
+
+    // account-pool-tri-sync · task 9.2：批量导入未启用池的「粘贴 / 上传 CSV」Tab 切换。
+    const bulkImportTabs = document.querySelectorAll("[data-bulk-import-tab]");
+    const bulkImportPanels = document.querySelectorAll("[data-bulk-import-panel]");
+    bulkImportTabs.forEach((tab) => {
+      tab.addEventListener("click", () => {
+        const targetKey = tab.dataset.bulkImportTab;
+        bulkImportTabs.forEach((sibling) => {
+          const isActive = sibling.dataset.bulkImportTab === targetKey;
+          sibling.classList.toggle("active", isActive);
+          sibling.setAttribute("aria-selected", isActive ? "true" : "false");
+        });
+        bulkImportPanels.forEach((panel) => {
+          const isActive = panel.dataset.bulkImportPanel === targetKey;
+          panel.classList.toggle("active", isActive);
+          if (isActive) {
+            panel.removeAttribute("hidden");
+          } else {
+            panel.setAttribute("hidden", "");
+          }
+        });
+      });
+    });
+
+    // 号池管理：新增账号弹窗的「单条 / 批量 / 导入未启用池」Tab 切换。
+    const newAccountTabs = document.querySelectorAll("[data-new-account-tab]");
+    const newAccountPanels = document.querySelectorAll("[data-new-account-panel]");
+    newAccountTabs.forEach((tab) => {
+      tab.addEventListener("click", () => {
+        const targetKey = tab.dataset.newAccountTab;
+        newAccountTabs.forEach((sibling) => {
+          const isActive = sibling.dataset.newAccountTab === targetKey;
+          sibling.classList.toggle("active", isActive);
+          sibling.setAttribute("aria-selected", isActive ? "true" : "false");
+        });
+        newAccountPanels.forEach((panel) => {
+          const isActive = panel.dataset.newAccountPanel === targetKey;
+          panel.classList.toggle("active", isActive);
+          if (isActive) {
+            panel.removeAttribute("hidden");
+          } else {
+            panel.setAttribute("hidden", "");
+          }
+        });
+      });
+    });
+
+    // account-pool-tri-sync · task 9.3：Random_Pick 命中后自动弹出模态。
+    // 后端通过 ``?random_picked_account_id=N`` 注入 ``random_picked_view`` 上下文，
+    // 模板渲染对应 dialog 并附带 ``data-auto-open="true"``；这里在 DOMContentLoaded
+    // 后调用 showModal 触发弹出，与「点击更多按钮再开」的常规路径互不影响。
+    document
+      .querySelectorAll("dialog[data-auto-open=\"true\"]")
+      .forEach((dialog) => {
+        if (typeof dialog.showModal === "function" && !dialog.open) {
+          dialog.showModal();
+        }
+      });
+
+    // 号池管理：账号多预约的展开 / 收缩切换。
+    // 默认折叠：只显示第一行预约 + 学号格 ▸ 按钮；rowspan 单元格初始 rowspan=1，
+    // 展开后改为 rowspan=N（N = 该账号的预约总数）让其再次跨多行。
+    document.querySelectorAll("[data-account-pool-toggle]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const groupId = button.dataset.accountPoolToggle;
+        const expanded = button.getAttribute("aria-expanded") === "true";
+        const nextExpanded = !expanded;
+        const extraRows = document.querySelectorAll(
+          "tr.account-pool-extra-row[data-account-group=\"" + groupId + "\"]"
+        );
+        extraRows.forEach((row) => {
+          if (nextExpanded) {
+            row.removeAttribute("hidden");
+          } else {
+            row.setAttribute("hidden", "");
+          }
+        });
+        const firstRow = document.querySelector(
+          "tr[data-pool-row=\"" + groupId + "\"][data-booking-row=\"0\"]"
+        );
+        if (firstRow) {
+          firstRow.querySelectorAll("td[data-rowspan-collapsed][data-rowspan-expanded]")
+            .forEach((cell) => {
+              const target = nextExpanded
+                ? cell.dataset.rowspanExpanded
+                : cell.dataset.rowspanCollapsed;
+              if (target) {
+                cell.setAttribute("rowspan", target);
+              }
+            });
+        }
+        button.setAttribute("aria-expanded", nextExpanded ? "true" : "false");
+        button.textContent = nextExpanded ? "▾" : "▸";
+      });
+    });
+
+    // 号池管理：批量操作对话框里的"全选 / 全不选 / 反选 / 只选未配置过的"工具栏。
+    // 通过 ``data-batch-select-group="{key}"`` 把按钮和 checkbox 列表绑在同一个 key 上。
+    function _findGroupCheckboxes(groupKey) {
+      const container = document.querySelector(
+        "[data-batch-select-group=\"" + groupKey + "\"]"
+      );
+      if (!container) {
+        return [];
+      }
+      return Array.from(
+        container.querySelectorAll("input[type=\"checkbox\"]")
+      );
+    }
+    document.querySelectorAll("[data-batch-select-all]").forEach((button) => {
+      button.addEventListener("click", () => {
+        _findGroupCheckboxes(button.dataset.batchSelectAll).forEach((box) => {
+          box.checked = true;
+        });
+      });
+    });
+    document.querySelectorAll("[data-batch-select-none]").forEach((button) => {
+      button.addEventListener("click", () => {
+        _findGroupCheckboxes(button.dataset.batchSelectNone).forEach((box) => {
+          box.checked = false;
+        });
+      });
+    });
+    document.querySelectorAll("[data-batch-select-invert]").forEach((button) => {
+      button.addEventListener("click", () => {
+        _findGroupCheckboxes(button.dataset.batchSelectInvert).forEach((box) => {
+          box.checked = !box.checked;
+        });
+      });
+    });
+    // "只选未配置过的"：把 ``data-has-existing-task="true"`` 的项取消勾选，
+    // 其它的勾上。号池管理的"按当前预约创建自动任务"用这个排除已有任务的账号。
+    document
+      .querySelectorAll("[data-batch-select-without-tasks]")
+      .forEach((button) => {
+        button.addEventListener("click", () => {
+          _findGroupCheckboxes(button.dataset.batchSelectWithoutTasks).forEach(
+            (box) => {
+              box.checked = box.dataset.hasExistingTask !== "true";
+            }
+          );
+        });
+      });
+  })();
+</script>
+{% endblock %}

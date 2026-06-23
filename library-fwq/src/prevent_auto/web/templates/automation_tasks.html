@@ -1,0 +1,400 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="hero-panel compact account-page-hero automation-task-hero">
+  <div>
+    <h2>自动任务</h2>
+    <p class="hero-copy">服务端会按启用任务检查预约；缺少目标时段时可自动补约。</p>
+  </div>
+  <div class="account-page-actions">
+    <form
+      method="post"
+      action="/automation-tasks/run-auto-reserve"
+      data-confirm-message="确认检查当前范围内账号的预约情况，并对缺失时段执行自动预约？"
+    >
+      <input type="hidden" name="account_id" value="{{ automation_task_filter_account_id }}">
+      <button class="button primary" type="submit">检查并补约</button>
+    </form>
+    <button
+      class="button ghost"
+      type="button"
+      aria-haspopup="dialog"
+      aria-controls="auto-reservation-log-dialog"
+      data-account-dialog-open="auto-reservation-log-dialog"
+    >补约日志</button>
+    <button
+      class="button primary"
+      type="button"
+      aria-haspopup="dialog"
+      aria-controls="generate-from-bookings-dialog"
+      data-account-dialog-open="generate-from-bookings-dialog"
+    >按预约生成</button>
+    <form
+      method="post"
+      action="/automation-tasks/bulk-enabled"
+      data-confirm-message="确认批量启用当前范围内的自动任务？"
+    >
+      <input type="hidden" name="account_id" value="{{ automation_task_filter_account_id }}">
+      <input type="hidden" name="enabled" value="true">
+      <button class="button ghost" type="submit">批量启用</button>
+    </form>
+    <form
+      method="post"
+      action="/automation-tasks/bulk-enabled"
+      data-confirm-message="确认批量停用当前范围内的自动任务？"
+    >
+      <input type="hidden" name="account_id" value="{{ automation_task_filter_account_id }}">
+      <input type="hidden" name="enabled" value="false">
+      <button class="button ghost" type="submit">批量停用</button>
+    </form>
+    <button
+      class="button danger"
+      type="button"
+      aria-haspopup="dialog"
+      aria-controls="bulk-soft-delete-dialog"
+      data-account-dialog-open="bulk-soft-delete-dialog"
+      {% if not automation_task_rows %}disabled{% endif %}
+    >批量删除</button>
+    <a class="button ghost" href="/accounts">返回号池管理</a>
+  </div>
+</section>
+
+{% include "_auto_reservation_log_dialog.html" %}
+
+<section class="automation-task-stat-grid" aria-label="自动任务统计">
+  <article class="automation-task-stat-card is-total">
+    <div>
+      <span class="automation-task-stat-label">任务</span>
+      <strong class="automation-task-stat-value">{{ automation_task_summary.total }}</strong>
+    </div>
+  </article>
+  <article class="automation-task-stat-card is-enabled">
+    <div>
+      <span class="automation-task-stat-label">启用</span>
+      <strong class="automation-task-stat-value">{{ automation_task_summary.enabled_count }}</strong>
+    </div>
+  </article>
+  <article class="automation-task-stat-card is-account">
+    <div>
+      <span class="automation-task-stat-label">账号</span>
+      <strong class="automation-task-stat-value">{{ automation_task_summary.account_count }}</strong>
+    </div>
+  </article>
+</section>
+
+<section class="panel automation-task-list-panel">
+  <div class="panel-heading-row">
+    <div>
+      <h3>任务列表</h3>
+      <p class="panel-subtitle">当前展示 {{ automation_task_rows|length }} 条未下线任务。</p>
+    </div>
+    <a class="button ghost" href="/logs?audit=pool&audit_action=task_upload&audit_action=task_upload_rejected">上传记录</a>
+  </div>
+
+  <form class="automation-task-filter-form" method="get" action="/automation-tasks">
+    <label class="automation-task-filter-field">
+      <span>账号 ID</span>
+      <input
+        type="number"
+        inputmode="numeric"
+        min="1"
+        step="1"
+        name="account_id"
+        value="{{ automation_task_filter_account_id }}"
+        placeholder="输入账号 ID"
+      >
+    </label>
+    <div class="automation-task-filter-actions">
+      <button class="button primary" type="submit">查询</button>
+      {% if automation_task_filter_account_id %}
+      <a class="button ghost" href="/automation-tasks">清空</a>
+      {% endif %}
+    </div>
+    {% if automation_task_filter_error %}
+    <p class="form-error" role="alert">{{ automation_task_filter_error }}</p>
+    {% endif %}
+  </form>
+
+  {% if automation_task_rows %}
+  <div class="automation-task-card-grid">
+    {% for row in automation_task_rows %}
+    <article class="automation-task-card {{ '' if row.enabled else 'is-disabled' }}">
+      <div class="automation-task-card-head">
+        <div class="automation-task-card-id">
+          <p class="brand-tag">账号 #{{ row.account_id }}</p>
+          <strong>{{ row.student_id }}</strong>
+          {% if row.display_name %}
+          <span class="automation-task-card-display-name">{{ row.display_name }}</span>
+          {% endif %}
+        </div>
+        <span class="automation-task-card-status {{ 'is-on' if row.enabled else 'is-off' }}">{{ row.enabled_label }}</span>
+      </div>
+
+      <div class="automation-task-card-seat">
+        <span class="automation-task-room">{{ row.room_name }}</span>
+        <span class="automation-task-seat-divider">/</span>
+        <span class="automation-task-seat-number">{{ row.seat_number }}</span>
+      </div>
+
+      <div class="automation-task-card-chips" aria-label="任务信息">
+        <span class="automation-task-chip is-mode">{{ row.mode_label }}</span>
+        <span class="automation-task-chip is-revision">v{{ row.revision }}</span>
+        <span class="automation-task-chip is-uploader is-uploader-{{ row.last_uploader_kind or 'none' }}">{{ row.last_uploader_label }}</span>
+        {% if row.custom_windows %}
+        <span class="automation-task-chip is-window">{{ row.custom_windows_label }}</span>
+        {% endif %}
+      </div>
+
+      <dl class="automation-task-card-meta">
+        <div>
+          <dt>更新</dt>
+          <dd>{{ row.updated_at_label or '—' }}</dd>
+        </div>
+        <div>
+          <dt>上传</dt>
+          <dd>{{ row.last_uploaded_at_label or '—' }}</dd>
+        </div>
+        <div>
+          <dt>任务 ID</dt>
+          <dd>#{{ row.task_id }}</dd>
+        </div>
+      </dl>
+
+      <div class="automation-task-card-actions">
+        <form
+          class="inline-form"
+          method="post"
+          action="/automation-tasks/{{ row.account_id }}/{{ row.task_id }}/soft-delete"
+          data-confirm-message="确认下线 #{{ row.task_id }}（{{ row.room_name }} · {{ row.seat_number }}）？"
+        >
+          <input type="hidden" name="revision" value="{{ row.revision }}">
+          <button class="button danger" type="submit">删除自动预约</button>
+        </form>
+      </div>
+    </article>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="automation-task-empty">
+    <p class="automation-task-empty-title">暂无自动任务</p>
+    <p class="automation-task-empty-hint">客户端上传任务后会显示在这里。</p>
+    {% if automation_task_filter_account_id %}
+    <a class="button ghost" href="/automation-tasks">查看全部</a>
+    {% endif %}
+  </div>
+  {% endif %}
+</section>
+
+<dialog
+  class="account-dialog batch-account-dialog"
+  id="generate-from-bookings-dialog"
+  data-account-dialog
+  aria-labelledby="generate-from-bookings-dialog-title"
+>
+  <div class="account-dialog-panel">
+    <div class="account-dialog-head">
+      <div>
+        <span class="status-pill muted">自动任务</span>
+        <h3 id="generate-from-bookings-dialog-title">按当前预约生成自动任务</h3>
+      </div>
+      <button
+        class="account-dialog-close"
+        type="button"
+        data-account-dialog-close
+        aria-label="关闭按当前预约生成自动任务"
+      >关闭</button>
+    </div>
+    <form
+      class="batch-delete-form"
+      method="post"
+      action="/automation-tasks/generate-from-bookings"
+    >
+      <p class="bulk-import-to-idle-tip">
+        会先刷新选中账号的预约视图，再按 <code>(自习室, 座位号, 起止小时)</code>
+        推导自动任务；未签到 / 已签到 / 待签到的预约都会参与。
+        <strong>已经存在自动任务的账号默认不勾选</strong>，可手动勾上做合并。
+      </p>
+      {% if task_generation_candidates %}
+      <div class="batch-delete-toolbar">
+        <button
+          class="button ghost"
+          type="button"
+          data-batch-select-all="task-generation"
+        >全选</button>
+        <button
+          class="button ghost"
+          type="button"
+          data-batch-select-none="task-generation"
+        >全不选</button>
+        <button
+          class="button ghost"
+          type="button"
+          data-batch-select-invert="task-generation"
+        >反选</button>
+        <button
+          class="button ghost"
+          type="button"
+          data-batch-select-without-tasks="task-generation"
+        >只选未配置过的</button>
+      </div>
+      <div class="batch-delete-list" data-batch-select-group="task-generation">
+        {% for candidate in task_generation_candidates %}
+        {% set has_existing = candidate.accountId in task_generation_existing_account_ids %}
+        <label class="batch-delete-item">
+          <input
+            type="checkbox"
+            name="account_ids"
+            value="{{ candidate.accountId }}"
+            data-has-existing-task="{{ 'true' if has_existing else 'false' }}"
+            {% if not has_existing %}checked{% endif %}
+          >
+          <span>{{ candidate.studentId }}</span>
+          <small>
+            {{ candidate.displayName }}
+            {% if has_existing %}<em>· 已有自动任务</em>{% endif %}
+          </small>
+        </label>
+        {% endfor %}
+      </div>
+      <label class="checkbox-row">
+        <input type="checkbox" name="auto_run_rolling" value="on" checked>
+        生成后立刻触发持续预约（默认勾选）
+      </label>
+      <div class="form-actions">
+        <button class="button primary" type="submit">按当前预约生成自动任务</button>
+        <button class="button ghost" type="button" data-account-dialog-close>取消</button>
+      </div>
+      {% else %}
+      <p class="empty-state">活跃池暂无账号，先把账号迁到活跃池再来生成。</p>
+      <div class="form-actions">
+        <button class="button ghost" type="button" data-account-dialog-close>关闭</button>
+      </div>
+      {% endif %}
+    </form>
+  </div>
+</dialog>
+
+<dialog
+  class="account-dialog batch-account-dialog"
+  id="bulk-soft-delete-dialog"
+  data-account-dialog
+  aria-labelledby="bulk-soft-delete-dialog-title"
+>
+  <div class="account-dialog-panel">
+    <div class="account-dialog-head">
+      <div>
+        <span class="status-pill muted">批量删除</span>
+        <h3 id="bulk-soft-delete-dialog-title">批量删除自动任务</h3>
+      </div>
+      <button
+        class="account-dialog-close"
+        type="button"
+        data-account-dialog-close
+        aria-label="关闭批量删除自动任务"
+      >关闭</button>
+    </div>
+    <form
+      class="batch-delete-form"
+      method="post"
+      action="/automation-tasks/bulk-soft-delete"
+    >
+      <input type="hidden" name="return_to" value="/automation-tasks{% if automation_task_filter_account_id %}?account_id={{ automation_task_filter_account_id }}{% endif %}">
+      <p class="bulk-import-to-idle-tip">
+        勾选要下线的任务后提交。下线动作通过乐观并发的 <code>revision</code> 校验，
+        服务端会跳过期间被其它端改过的条目并在结果里告知。
+      </p>
+      {% if automation_task_rows %}
+      <div class="batch-delete-toolbar">
+        <button
+          class="button ghost"
+          type="button"
+          data-batch-select-all="task-soft-delete"
+        >全选</button>
+        <button
+          class="button ghost"
+          type="button"
+          data-batch-select-none="task-soft-delete"
+        >全不选</button>
+        <button
+          class="button ghost"
+          type="button"
+          data-batch-select-invert="task-soft-delete"
+        >反选</button>
+      </div>
+      <div class="batch-delete-list" data-batch-select-group="task-soft-delete">
+        {% for row in automation_task_rows %}
+        <label class="batch-delete-item">
+          <input
+            type="checkbox"
+            name="task_keys"
+            value="{{ row.account_id }}:{{ row.task_id }}:{{ row.revision }}"
+          >
+          <span>#{{ row.task_id }} · {{ row.room_name }} · {{ row.seat_number }}</span>
+          <small>账号 #{{ row.account_id }} {{ row.student_id }} · v{{ row.revision }}</small>
+        </label>
+        {% endfor %}
+      </div>
+      <div class="form-actions">
+        <button class="button danger" type="submit">删除选中任务</button>
+        <button class="button ghost" type="button" data-account-dialog-close>取消</button>
+      </div>
+      {% else %}
+      <p class="empty-state">当前列表里没有可批量删除的任务。</p>
+      <div class="form-actions">
+        <button class="button ghost" type="button" data-account-dialog-close>关闭</button>
+      </div>
+      {% endif %}
+    </form>
+  </div>
+</dialog>
+
+<script>
+  (() => {
+    function _findGroupCheckboxes(groupKey) {
+      const container = document.querySelector(
+        "[data-batch-select-group=\"" + groupKey + "\"]"
+      );
+      if (!container) {
+        return [];
+      }
+      return Array.from(
+        container.querySelectorAll("input[type=\"checkbox\"]")
+      );
+    }
+    document.querySelectorAll("[data-batch-select-all]").forEach((button) => {
+      button.addEventListener("click", () => {
+        _findGroupCheckboxes(button.dataset.batchSelectAll).forEach((box) => {
+          box.checked = true;
+        });
+      });
+    });
+    document.querySelectorAll("[data-batch-select-none]").forEach((button) => {
+      button.addEventListener("click", () => {
+        _findGroupCheckboxes(button.dataset.batchSelectNone).forEach((box) => {
+          box.checked = false;
+        });
+      });
+    });
+    document.querySelectorAll("[data-batch-select-invert]").forEach((button) => {
+      button.addEventListener("click", () => {
+        _findGroupCheckboxes(button.dataset.batchSelectInvert).forEach((box) => {
+          box.checked = !box.checked;
+        });
+      });
+    });
+    // "只选未配置过的"：把 ``data-has-existing-task="true"`` 的项取消勾选，
+    // 其它的勾上。"按当前预约生成自动任务"对话框用这个排除已有任务的账号。
+    document
+      .querySelectorAll("[data-batch-select-without-tasks]")
+      .forEach((button) => {
+        button.addEventListener("click", () => {
+          _findGroupCheckboxes(button.dataset.batchSelectWithoutTasks).forEach(
+            (box) => {
+              box.checked = box.dataset.hasExistingTask !== "true";
+            }
+          );
+        });
+      });
+  })();
+</script>
+{% include "_dialog_script.html" %}
+{% endblock %}

@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "prevent-auto"
+version = "0.1.1"
+description = "武夷学院超时签到自动补约服务"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "cryptography>=48.0.0",
+    "fastapi>=0.115,<1.0",
+    "jinja2>=3.1,<4.0",
+    "python-multipart>=0.0.9,<1.0",
+    "uvicorn>=0.30,<1.0",
+]
+
+[project.optional-dependencies]
+test = [
+    "httpx>=0.28,<1.0",
+    "pytest>=8.0,<9.0",
+]
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+prevent_auto = ["web/templates/*.html", "web/static/*.css"]

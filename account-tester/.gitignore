@@ -1,0 +1,6 @@
+# 不要把真实学号、运行结果带进仓库
+accounts.txt
+results/
+*.local.txt
+*.local.csv
+*.local.json

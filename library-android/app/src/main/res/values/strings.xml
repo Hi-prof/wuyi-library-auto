@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Wuyi Library Auto</string>
+    <string name="wuyi_accessibility_service_description">用于辅助后续签到与自动化流程的无障碍入口。</string>
+    <string name="seat_display_title">座位展示</string>
+    <string name="seat_display_refresh_all">刷新全部</string>
+    <string name="seat_display_refresh">刷新</string>
+    <string name="seat_display_refreshing">刷新中…</string>
+    <string name="seat_display_status_need_login">需登录</string>
+    <string name="seat_display_status_idle">暂无预约</string>
+    <string name="seat_display_status_reserved_waiting_signin">待签到</string>
+    <string name="seat_display_status_active_signed_in">已签到</string>
+    <string name="seat_display_status_finished_or_history">最近记录已结束</string>
+    <string name="seat_display_empty_hint">暂无账号座位状态，先添加账号。</string>
+    <string name="seat_display_failure_prefix">刷新失败</string>
+    <string name="account_refresh_all_label">刷新全部账号状态</string>
+    <string name="account_refresh_all_running">刷新中…</string>
+    <string name="account_refresh_single">刷新</string>
+    <string name="account_filter_placeholder">搜索学号、房间或座位</string>
+    <string name="account_filter_empty_hint">没有匹配账号</string>
+    <string name="account_filter_clear">清除搜索</string>
+    <string name="account_bulk_import_title">批量导入</string>
+    <string name="account_bulk_import_confirm">开始导入</string>
+    <string name="account_bulk_import_cancel">取消</string>
+    <string name="account_bulk_import_cap_exceeded">单次批量导入超过上限，请分批导入</string>
+    <string name="account_bulk_import_summary_success">成功 %1$d 条</string>
+    <string name="account_bulk_import_summary_skipped">跳过 %1$d 条（重复）</string>
+    <string name="account_bulk_import_summary_failed">失败 %1$d 条</string>
+    <string name="account_bulk_action_enter">批量管理</string>
+    <string name="account_bulk_action_exit">退出多选</string>
+    <string name="account_bulk_action_select_all">全选</string>
+    <string name="account_bulk_action_delete_selected">删除所选</string>
+    <string name="account_bulk_action_export_selected">导出所选</string>
+    <string name="account_bulk_action_confirm_delete_title">确认删除所选账号</string>
+    <string name="account_bulk_action_confirm_delete_body">将删除 %1$d 个账号，删除后会同时移除会话</string>
+    <string name="account_bulk_action_nothing_selected">未选择账号</string>
+    <string name="task_list_empty_short">暂无自动任务，先创建计划。</string>
+</resources>

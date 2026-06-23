@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="hero-panel compact">
+  <div class="account-detail-hero-head">
+    <div class="account-device-title-block">
+      <h2>{{ account.name }}</h2>
+      <p class="hero-copy">{{ account.student_id }}</p>
+    </div>
+    <span class="status-pill {{ 'success' if account.enabled else 'danger' }}">{{ "启用中" if account.enabled else "已停用" }}</span>
+  </div>
+  <div class="account-detail-summary-grid">
+    <article class="account-highlight-card">
+      <span>最近检测</span>
+      <strong>{{ format_datetime(account.last_check_at, default="尚未检测") }}</strong>
+    </article>
+    <article class="account-highlight-card wide">
+      <span>当前状态</span>
+      <strong>{{ account.last_status or "暂无状态" }}</strong>
+    </article>
+    <article class="account-highlight-card">
+      <span>预约座位</span>
+      <strong>{% if account.last_detected_room_name and account.last_detected_seat_number %}{{ format_room_seat(account.last_detected_room_name, account.last_detected_seat_number) }}{% else %}未识别到预约座位{% endif %}</strong>
+    </article>
+    <article class="account-highlight-card">
+      <span>登录入口</span>
+      <strong>{{ "已配置" if account.login_url else "未配置" }}</strong>
+    </article>
+  </div>
+  <div class="action-strip mobile-action-grid">
+    <form method="post" action="/accounts/{{ account.id }}/check-now"><button class="button primary" type="submit">立即检测</button></form>
+    <form method="post" action="/accounts/{{ account.id }}/cancel-current" data-confirm-message="确认取消当前可取消的预约？"><button class="button danger" type="submit">取消当前预约</button></form>
+    <form method="post" action="/accounts/{{ account.id }}/refresh-login"><button class="button ghost" type="submit">刷新登录态</button></form>
+    <a class="button ghost" href="/accounts/{{ account.id }}/edit">编辑账号</a>
+    <form method="post" action="/accounts/{{ account.id }}/delete" data-confirm-message="确认删除这个账号？相关巡检记录和动作日志也会删除。"><button class="button danger" type="submit">删除账号</button></form>
+  </div>
+</section>
+
+<section class="split-grid">
+  <article class="panel">
+    <h3>最近巡检</h3>
+    <ul class="log-list">
+      {% for item in monitor_records %}
+      <li><strong>{{ format_datetime(item.detected_at, default="无时间") }}</strong><span>{{ item.decision }} · {{ item.detail }}</span></li>
+      {% else %}
+      <li class="empty-state">还没有巡检记录。</li>
+      {% endfor %}
+    </ul>
+  </article>
+
+  <article class="panel">
+    <h3>动作日志</h3>
+    <ul class="log-list">
+      {% for item in action_logs %}
+      <li><strong>{{ format_datetime(item.created_at, default="无时间") }}</strong><span>{{ item.action_type }} · {{ "成功" if item.success else "失败" }} · {{ item.message }}</span></li>
+      {% else %}
+      <li class="empty-state">还没有动作日志。</li>
+      {% endfor %}
+    </ul>
+  </article>
+</section>
+{% endblock %}

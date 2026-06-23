@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="hero-panel compact">
+  <h2>{{ "修改账号配置" if account else "录入一个新账号" }}</h2>
+  <p>只需要学号和密码，密码留空时默认和学号一致。</p>
+</section>
+
+<section class="panel">
+  <form class="form-grid" method="post" action="{{ '/accounts/' ~ account.id if account else '/accounts' }}">
+    <label><span>学号</span><input name="student_id" required value="{{ account.student_id if account else '' }}"></label>
+    <label><span>密码</span><input name="password" type="password" autocomplete="new-password" placeholder="留空时默认和学号一致"></label>
+    <label class="checkbox-row"><input type="checkbox" name="enabled" {% if not account or account.enabled %}checked{% endif %}> 启用自动监测</label>
+    <div class="form-actions">
+      <button class="button primary" type="submit">保存账号</button>
+      <a class="button ghost" href="/accounts">返回列表</a>
+    </div>
+  </form>
+</section>
+{% endblock %}

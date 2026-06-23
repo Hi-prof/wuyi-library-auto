@@ -1,0 +1,48 @@
+# Python 缓存
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+
+# 虚拟环境
+.venv/
+venv/
+env/
+
+# 构建产物
+build/
+dist/
+pip-wheel-metadata/
+
+# 本地运行状态
+runtime/
+output/
+.tmp/
+.tmp-test/
+.serena/
+.claude/
+.factory/
+AGENTS.md
+config.json
+config.json.bak
+别人电脑的运行日志/
+运行日志/
+
+# Android 源码目录不要被上面的 runtime/ 规则误伤
+!library-android/core/runtime/
+!library-android/core/runtime/**
+!library-android/app/src/main/java/com/wuyi/libraryauto/runtime/
+!library-android/app/src/main/java/com/wuyi/libraryauto/runtime/**
+library-android/core/runtime/build/
+library-android/.gradle/
+library-android/.gradle*/
+library-android/local.properties
+library-android/keystore.properties
+library-android/keystore/
+library-android/*.jks
+library-android/*.keystore
+library-android/**/hs_err_pid*.log
+library-android/**/replay_pid*.log

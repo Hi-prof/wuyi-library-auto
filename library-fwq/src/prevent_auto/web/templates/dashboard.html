@@ -1,0 +1,131 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="hero-panel compact account-page-hero seat-display-hero">
+  <div>
+    <h2>仪表盘</h2>
+    <p class="hero-copy">按自习室汇总当前所有账号的预约和在馆座位（含明天、后天）。</p>
+  </div>
+  <div class="account-page-actions">
+    <form
+      method="post"
+      action="/accounts/run-rolling-reservation"
+      data-confirm-message="确认立刻检查预约？检查后没有预约的时段会自动补上。"
+    >
+      <input type="hidden" name="return_to" value="/">
+      <button
+        class="button primary"
+        type="submit"
+        title="对所有启用账号执行一次检查，缺失的时段会立刻自动预约"
+      >立刻检查并补齐预约</button>
+    </form>
+    <button
+      class="button ghost"
+      type="button"
+      aria-haspopup="dialog"
+      aria-controls="auto-reservation-log-dialog"
+      data-account-dialog-open="auto-reservation-log-dialog"
+    >补约日志</button>
+    <a class="button ghost" href="/accounts">号池管理</a>
+  </div>
+</section>
+
+{% include "_auto_reservation_log_dialog.html" %}
+
+<section class="dashboard-summary-shell seat-display-summary-shell">
+  <section class="stats-grid">
+    <article class="stat-card"><span>预约位置</span><strong>{{ seat_display.seatCount }}</strong></article>
+    <article class="stat-card"><span>涉及自习室</span><strong>{{ seat_display.roomCount }}</strong></article>
+    <article class="stat-card"><span>账号总数</span><strong>{{ summary.accountCount }}</strong></article>
+    <article class="stat-card"><span>今日已签到</span><strong>{{ summary.checkedInTodayCount }}</strong></article>
+    <article class="stat-card"><span>今日未预约</span><strong>{{ summary.notReservedTodayCount }}</strong></article>
+  </section>
+</section>
+
+<section class="panel">
+  <div class="panel-heading-row">
+    <div>
+      <h3>自习室预约分布</h3>
+      <p class="panel-subtitle">展示今天、明天、后天的预约座位，签到状态与 Window 客户端保持一致。</p>
+    </div>
+  </div>
+
+  <div class="seat-display-list">
+    {% for group in seat_display.groups %}
+    <article class="seat-display-room seat-display-room-card">
+      <div class="seat-display-room-head">
+        <div>
+          <h4>{{ group.roomName }}</h4>
+          <p>{{ group["items"] | length }} 个预约座位</p>
+        </div>
+        <span class="mini-tag seat-display-room-summary">{{ group.seatSummary }}</span>
+      </div>
+      <div class="seat-display-seat-grid">
+        {% for item in group["items"] %}
+        {%- set tone = item.badgeTone or "muted" -%}
+        {%- if tone == "success" -%}{%- set state = "active" -%}
+        {%- elif tone == "warning" -%}{%- set state = "reserved" -%}
+        {%- elif tone == "danger" -%}{%- set state = "alert" -%}
+        {%- else -%}{%- set state = "finished" -%}{%- endif -%}
+        {%- set slots = item.slots or [{"dateLabel": item.dateLabel, "timeRangeLabel": item.timeRangeLabel, "bookingStatusLabel": item.bookingStatusLabel, "badgeTone": item.badgeTone, "studentId": item.studentId, "accountName": item.accountName, "accountId": item.accountId}] -%}
+        <article class="seat-display-seat-card state-{{ state }}">
+          <div class="seat-display-seat-head">
+            <div class="seat-display-seat-title">
+              <span class="seat-display-chair-icon" aria-hidden="true"></span>
+              <div>
+                <strong>{{ item.seatNumber }} 号</strong>
+                <p>
+                  <a href="/accounts/{{ item.accountId }}">
+                    {%- if item.accountName and item.accountName != item.studentId -%}
+                    {{ item.studentId }} · {{ item.accountName }}
+                    {%- else -%}
+                    {{ item.studentId }}
+                    {%- endif -%}
+                  </a>
+                </p>
+              </div>
+            </div>
+            {% if slots | length > 1 %}
+            <span class="task-state-badge state-{{ state }}">{{ slots | length }} 个时段</span>
+            {% else %}
+            <span class="task-state-badge state-{{ state }}">{{ item.bookingStatusLabel }}</span>
+            {% endif %}
+          </div>
+          <div class="seat-display-seat-meta" aria-label="预约时间段">
+            {% for slot in slots %}
+            {%- set slot_tone = slot.badgeTone or "muted" -%}
+            {%- if slot_tone == "success" -%}{%- set slot_state = "active" -%}
+            {%- elif slot_tone == "warning" -%}{%- set slot_state = "reserved" -%}
+            {%- elif slot_tone == "danger" -%}{%- set slot_state = "alert" -%}
+            {%- else -%}{%- set slot_state = "finished" -%}{%- endif -%}
+            <div class="seat-display-time-slot state-{{ slot_state }}{% if not slot.timeRangeLabel %} is-empty{% endif %}">
+              <span class="seat-display-slot-day">{{ slot.dateLabel }}</span>
+              <strong class="seat-display-slot-time">{{ slot.timeRangeLabel or "暂无时间" }}</strong>
+              <span class="seat-display-slot-tags">
+                {% if slot.studentId and slot.studentId != item.studentId %}
+                <span class="seat-display-slot-tag seat-display-slot-owner">
+                  {%- if slot.accountId -%}
+                  <a href="/accounts/{{ slot.accountId }}">{{ slot.studentId }}</a>
+                  {%- else -%}
+                  {{ slot.studentId }}
+                  {%- endif -%}
+                </span>
+                {% endif %}
+                {% if slot.bookingStatusLabel %}
+                <span class="seat-display-slot-tag">{{ slot.bookingStatusLabel }}</span>
+                {% endif %}
+              </span>
+            </div>
+            {% endfor %}
+          </div>
+        </article>
+        {% endfor %}
+      </div>
+    </article>
+    {% else %}
+    <p class="empty-state">当前没有可展示的预约位置。请前往号池管理手动刷新最新数据。</p>
+    {% endfor %}
+  </div>
+</section>
+
+{% include "_dialog_script.html" %}
+{% endblock %}
