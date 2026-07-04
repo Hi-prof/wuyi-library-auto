@@ -170,6 +170,26 @@ class WebAppTestCase(unittest.TestCase):
             response.text.index("自习室预约分布"),
         )
 
+    def test_dashboard_attention_item_includes_recommended_actions(self) -> None:
+        with connect_database(self.database_path) as connection:
+            connection.execute(
+                """
+                UPDATE accounts
+                SET last_check_at = '2026-07-05T08:10:00+08:00',
+                    last_status = '刷新登录失败：账号密码错误'
+                WHERE id = 1
+                """
+            )
+        self.login()
+
+        response = self.client.get("/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("登录态异常", response.text)
+        self.assertIn("刷新登录态", response.text)
+        self.assertIn("/accounts/1/refresh-login", response.text)
+        self.assertIn("查看详情", response.text)
+
     def test_dashboard_health_reports_normal_state(self) -> None:
         health = build_dashboard_health(
             {
@@ -330,7 +350,7 @@ class WebAppTestCase(unittest.TestCase):
         self.assertNotIn("<dt>目标座位</dt>", response.text)
         self.assertNotIn("查看账号详情", response.text)
 
-    def test_dashboard_no_longer_renders_per_account_check_now_button(
+    def test_dashboard_attention_item_includes_check_now_action_for_unchecked_account(
         self,
     ) -> None:
         self.login()
@@ -338,8 +358,9 @@ class WebAppTestCase(unittest.TestCase):
         response = self.client.get("/")
 
         self.assertEqual(response.status_code, 200)
-        self.assertNotIn('action="/accounts/1/check-now"', response.text)
-        self.assertNotIn('class="account-overview-refresh-button"', response.text)
+        self.assertIn('action="/accounts/1/check-now"', response.text)
+        self.assertIn("立即检测", response.text)
+        self.assertIn("查看详情", response.text)
 
     def test_dashboard_page_links_to_account_management(self) -> None:
         self.login()
