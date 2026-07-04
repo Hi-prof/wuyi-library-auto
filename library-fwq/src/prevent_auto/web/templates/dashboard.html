@@ -39,6 +39,8 @@
       <p class="panel-subtitle">
         {% if dashboard_health.overallState == "healthy" %}
         当前没有发现需要处理的账号。
+        {% elif dashboard_health.counters.accountCount == 0 %}
+        当前还没有账号，先到号池管理新增账号。
         {% elif dashboard_health.overallState == "unchecked" %}
         账号还没有形成完整检测结果，建议先执行一次检查。
         {% else %}
@@ -96,11 +98,13 @@
       <div class="dashboard-attention-actions">
         {% if "立即检测" in item.recommendedActions %}
         <form method="post" action="/accounts/{{ item.accountId }}/check-now">
+          <input type="hidden" name="return_to" value="/">
           <button class="button primary" type="submit">立即检测</button>
         </form>
         {% endif %}
         {% if "刷新登录态" in item.recommendedActions %}
         <form method="post" action="/accounts/{{ item.accountId }}/refresh-login">
+          <input type="hidden" name="return_to" value="/">
           <button class="button ghost" type="submit">刷新登录态</button>
         </form>
         {% endif %}

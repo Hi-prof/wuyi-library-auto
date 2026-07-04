@@ -848,9 +848,12 @@ def create_app(
         )
 
     @app.post("/accounts/{account_id}/refresh-login")
-    def refresh_login(account_id: int) -> RedirectResponse:
+    def refresh_login(
+        account_id: int,
+        return_to: str = Form(default="/accounts"),
+    ) -> RedirectResponse:
         status_message = _refresh_account_login_state(app.state.services, account_id)
-        return _redirect_with_notice("/accounts", status_message)
+        return _redirect_with_notice(_normalize_next_path(return_to), status_message)
 
     @app.post("/accounts/{account_id}/cancel-current")
     def cancel_current_booking(account_id: int) -> RedirectResponse:

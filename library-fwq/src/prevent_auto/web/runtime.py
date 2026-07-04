@@ -303,9 +303,7 @@ def build_dashboard_health(summary: dict[str, object]) -> dict[str, object]:
         overall_state = "unchecked"
         overall_label = "暂无账号"
         overall_tone = "muted"
-    elif attention_items and all(
-        item["issueType"] == "unchecked" for item in attention_items
-    ):
+    elif account_count > 0 and unchecked_count == account_count:
         overall_state = "unchecked"
         overall_label = "尚未检测"
         overall_tone = "muted"
@@ -313,10 +311,6 @@ def build_dashboard_health(summary: dict[str, object]) -> dict[str, object]:
         overall_state = "attention"
         overall_label = "需要处理"
         overall_tone = "warning"
-    elif unchecked_count == account_count:
-        overall_state = "unchecked"
-        overall_label = "尚未检测"
-        overall_tone = "muted"
     else:
         overall_state = "healthy"
         overall_label = "运行正常"
