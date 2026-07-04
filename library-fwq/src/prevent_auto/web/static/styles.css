@@ -664,12 +664,22 @@ th { color: var(--muted); font-size: 13px; text-transform: uppercase; letter-spa
   }
 
   .dashboard-attention-actions {
-    justify-content: stretch;
+    justify-content: flex-start;
   }
 
   .dashboard-attention-actions form,
-  .dashboard-attention-actions .button {
+  .dashboard-attention-actions > .button {
     flex: 1 1 130px;
+  }
+
+  .dashboard-attention-actions form {
+    display: flex;
+    min-width: 0;
+  }
+
+  .dashboard-attention-actions form .button,
+  .dashboard-attention-actions > .button {
+    width: 100%;
   }
 }
 
