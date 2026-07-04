@@ -156,6 +156,20 @@ class WebAppTestCase(unittest.TestCase):
         self.assertIn("自习室预约分布", response.text)
         self.assertIn("mobile.css", response.text)
 
+    def test_dashboard_page_renders_health_sections_before_seat_distribution(self) -> None:
+        self.login()
+
+        response = self.client.get("/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("运行状态", response.text)
+        self.assertIn("待处理事项", response.text)
+        self.assertIn("尚未检测", response.text)
+        self.assertLess(
+            response.text.index("运行状态"),
+            response.text.index("自习室预约分布"),
+        )
+
     def test_dashboard_health_reports_normal_state(self) -> None:
         health = build_dashboard_health(
             {
