@@ -16,6 +16,28 @@ from prevent_auto.services.account_service import AccountService
 from prevent_auto.settings import PreventAutoSettings
 from prevent_auto.web.app import create_app
 from prevent_auto.web.runtime import AUTO_RESERVATION_DETAILED_LOG_KEY
+from prevent_auto.web.runtime import build_dashboard_health
+
+
+def _health_snapshot(
+    *,
+    account_id: int = 1,
+    student_id: str = "20231121130",
+    name: str = "主号",
+    current_status: str = "状态检测：正常",
+    last_check_label: str = "2026年07月05日08时10分00秒",
+    checked_in: bool = False,
+    not_reserved: bool = False,
+) -> dict[str, object]:
+    return {
+        "id": account_id,
+        "name": name,
+        "studentId": student_id,
+        "currentStatus": current_status,
+        "lastCheckLabel": last_check_label,
+        "isCheckedInToday": checked_in,
+        "isNotReservedToday": not_reserved,
+    }
 
 
 class WebAppTestCase(unittest.TestCase):
@@ -133,6 +155,84 @@ class WebAppTestCase(unittest.TestCase):
         self.assertNotIn("需要关注的账号", response.text)
         self.assertIn("自习室预约分布", response.text)
         self.assertIn("mobile.css", response.text)
+
+    def test_dashboard_health_reports_normal_state(self) -> None:
+        health = build_dashboard_health(
+            {
+                "accountCount": 1,
+                "checkedInTodayCount": 1,
+                "notReservedTodayCount": 0,
+                "accountSnapshots": [
+                    _health_snapshot(checked_in=True),
+                ],
+            }
+        )
+
+        self.assertEqual(health["overallState"], "healthy")
+        self.assertEqual(health["overallLabel"], "运行正常")
+        self.assertEqual(health["counters"]["attentionCount"], 0)
+        self.assertEqual(health["attentionItems"], [])
+
+    def test_dashboard_health_prioritizes_login_issue(self) -> None:
+        health = build_dashboard_health(
+            {
+                "accountCount": 1,
+                "checkedInTodayCount": 0,
+                "notReservedTodayCount": 0,
+                "accountSnapshots": [
+                    _health_snapshot(
+                        current_status="刷新登录失败：账号密码错误",
+                        not_reserved=True,
+                    ),
+                ],
+            }
+        )
+
+        self.assertEqual(health["overallState"], "attention")
+        self.assertEqual(health["counters"]["loginIssueCount"], 1)
+        self.assertEqual(health["attentionItems"][0]["issueType"], "login")
+        self.assertEqual(health["attentionItems"][0]["issueLabel"], "登录态异常")
+        self.assertIn("刷新登录态", health["attentionItems"][0]["recommendedActions"])
+
+    def test_dashboard_health_reports_not_reserved_account(self) -> None:
+        health = build_dashboard_health(
+            {
+                "accountCount": 1,
+                "checkedInTodayCount": 0,
+                "notReservedTodayCount": 1,
+                "accountSnapshots": [
+                    _health_snapshot(
+                        current_status="今日无预约",
+                        not_reserved=True,
+                    ),
+                ],
+            }
+        )
+
+        self.assertEqual(health["overallState"], "attention")
+        self.assertEqual(health["attentionItems"][0]["issueType"], "not_reserved")
+        self.assertEqual(health["attentionItems"][0]["issueLabel"], "未预约")
+        self.assertIn("立即检测", health["attentionItems"][0]["recommendedActions"])
+
+    def test_dashboard_health_reports_unchecked_account(self) -> None:
+        health = build_dashboard_health(
+            {
+                "accountCount": 1,
+                "checkedInTodayCount": 0,
+                "notReservedTodayCount": 0,
+                "accountSnapshots": [
+                    _health_snapshot(
+                        current_status="尚未检测",
+                        last_check_label="尚未检测",
+                    ),
+                ],
+            }
+        )
+
+        self.assertEqual(health["overallState"], "unchecked")
+        self.assertEqual(health["counters"]["uncheckedCount"], 1)
+        self.assertEqual(health["attentionItems"][0]["issueType"], "unchecked")
+        self.assertEqual(health["attentionItems"][0]["issueLabel"], "尚未检测")
 
     def test_dashboard_summary_counts_checked_in_and_not_reserved_accounts(self) -> None:
         self.login()

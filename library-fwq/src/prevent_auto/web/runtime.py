@@ -66,6 +66,21 @@ NORMAL_STATUS_PREFIXES = (
 VISIBLE_SEAT_DISPLAY_STATUSES = {"0", "1", "2", "8"}
 AUTO_RESERVATION_DETAILED_LOG_KEY = "auto_reservation_detailed_log_enabled"
 
+DASHBOARD_LOGIN_ISSUE_KEYWORDS = (
+    "登录失败",
+    "刷新登录失败",
+    "登录态失效",
+    "登录态过期",
+    "账号密码错误",
+    "密码错误",
+    "认证失败",
+    "凭据",
+)
+
+DASHBOARD_NORMAL_STATUS_PREFIXES = NORMAL_STATUS_PREFIXES + (
+    "今日无预约",
+)
+
 
 @dataclass(frozen=True)
 class AppServices:
@@ -257,6 +272,141 @@ def build_dashboard_summary(
     if settings is not None:
         summary["runtime"] = build_runtime_summary(settings)
     return summary
+
+
+def build_dashboard_health(summary: dict[str, object]) -> dict[str, object]:
+    snapshots = [
+        item
+        for item in summary.get("accountSnapshots", [])
+        if isinstance(item, dict)
+    ]
+    attention_items = [
+        item
+        for item in (
+            _classify_dashboard_health_snapshot(snapshot)
+            for snapshot in snapshots
+        )
+        if item is not None
+    ]
+    attention_items.sort(key=lambda item: (item["priority"], item["studentId"]))
+    for item in attention_items:
+        item.pop("priority", None)
+
+    unchecked_count = sum(
+        1 for snapshot in snapshots if _is_unchecked_dashboard_snapshot(snapshot)
+    )
+    login_issue_count = sum(
+        1 for item in attention_items if item["issueType"] == "login"
+    )
+    account_count = int(summary.get("accountCount") or len(snapshots))
+    if account_count == 0:
+        overall_state = "unchecked"
+        overall_label = "暂无账号"
+        overall_tone = "muted"
+    elif attention_items and all(
+        item["issueType"] == "unchecked" for item in attention_items
+    ):
+        overall_state = "unchecked"
+        overall_label = "尚未检测"
+        overall_tone = "muted"
+    elif attention_items:
+        overall_state = "attention"
+        overall_label = "需要处理"
+        overall_tone = "warning"
+    elif unchecked_count == account_count:
+        overall_state = "unchecked"
+        overall_label = "尚未检测"
+        overall_tone = "muted"
+    else:
+        overall_state = "healthy"
+        overall_label = "运行正常"
+        overall_tone = "success"
+
+    return {
+        "overallState": overall_state,
+        "overallLabel": overall_label,
+        "overallTone": overall_tone,
+        "counters": {
+            "accountCount": account_count,
+            "checkedInTodayCount": int(summary.get("checkedInTodayCount") or 0),
+            "notReservedTodayCount": int(summary.get("notReservedTodayCount") or 0),
+            "attentionCount": len(attention_items),
+            "loginIssueCount": login_issue_count,
+            "uncheckedCount": unchecked_count,
+        },
+        "attentionItems": attention_items,
+    }
+
+
+def _classify_dashboard_health_snapshot(
+    snapshot: dict[str, object],
+) -> dict[str, object] | None:
+    status_text = str(snapshot.get("currentStatus", "") or "").strip()
+    last_check_label = str(snapshot.get("lastCheckLabel", "") or "").strip()
+    reason = status_text or "尚未检测"
+    base_item = {
+        "accountId": int(snapshot.get("id") or 0),
+        "studentId": str(snapshot.get("studentId", "") or "").strip(),
+        "accountName": str(snapshot.get("name", "") or "").strip(),
+        "reason": reason,
+        "lastCheckLabel": last_check_label or "尚未检测",
+    }
+    if _is_login_issue_status(status_text):
+        return {
+            **base_item,
+            "priority": 0,
+            "issueType": "login",
+            "issueLabel": "登录态异常",
+            "tone": "danger",
+            "recommendedActions": ("刷新登录态", "查看详情"),
+        }
+    if _is_unchecked_dashboard_snapshot(snapshot):
+        return {
+            **base_item,
+            "priority": 3,
+            "issueType": "unchecked",
+            "issueLabel": "尚未检测",
+            "tone": "muted",
+            "recommendedActions": ("立即检测", "查看详情"),
+        }
+    if _is_abnormal_dashboard_status(status_text):
+        return {
+            **base_item,
+            "priority": 1,
+            "issueType": "check_failed",
+            "issueLabel": "检测失败",
+            "tone": "danger",
+            "recommendedActions": ("立即检测", "查看详情"),
+        }
+    if bool(snapshot.get("isNotReservedToday")):
+        return {
+            **base_item,
+            "priority": 2,
+            "issueType": "not_reserved",
+            "issueLabel": "未预约",
+            "tone": "warning",
+            "recommendedActions": ("立即检测", "查看详情"),
+        }
+    return None
+
+
+def _is_login_issue_status(status_text: str) -> bool:
+    return any(keyword in status_text for keyword in DASHBOARD_LOGIN_ISSUE_KEYWORDS)
+
+
+def _is_abnormal_dashboard_status(status_text: str) -> bool:
+    text = status_text.strip()
+    if not text:
+        return False
+    return not any(
+        text.startswith(prefix) for prefix in DASHBOARD_NORMAL_STATUS_PREFIXES
+    )
+
+
+def _is_unchecked_dashboard_snapshot(snapshot: dict[str, object]) -> bool:
+    last_check_label = str(snapshot.get("lastCheckLabel", "") or "").strip()
+    status_text = str(snapshot.get("currentStatus", "") or "").strip()
+    return last_check_label in {"", "尚未检测"} or status_text in {"", "尚未检测"}
 
 
 def build_runtime_summary(
