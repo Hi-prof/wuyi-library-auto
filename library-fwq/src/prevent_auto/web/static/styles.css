@@ -211,7 +211,10 @@ body {
   word-break: break-all;
 }
 
-.table-shell { overflow-x: auto; }
+.table-shell,
+.responsive-table-shell {
+  overflow-x: auto;
+}
 table { width: 100%; border-collapse: collapse; }
 th, td { padding: 14px 12px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
 th { color: var(--muted); font-size: 13px; text-transform: uppercase; letter-spacing: 0.12em; }

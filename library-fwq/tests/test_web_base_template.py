@@ -1,12 +1,12 @@
 """Tests for base template and navigation component."""
 
 
-def test_base_new_template_exists():
-    """Verify base_new.html template exists."""
+def test_base_template_exists():
+    """Verify base.html template exists."""
     from pathlib import Path
     from prevent_auto.settings import load_settings
     settings = load_settings()
-    template_path = settings.package_root / "src" / "prevent_auto" / "web" / "templates" / "base_new.html"
+    template_path = settings.package_root / "src" / "prevent_auto" / "web" / "templates" / "base.html"
     assert template_path.exists()
 
 

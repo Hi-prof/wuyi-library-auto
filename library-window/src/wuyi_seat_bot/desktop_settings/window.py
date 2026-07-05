@@ -48,11 +48,6 @@ class SettingsWindow:
 
         self.network_enabled_var = tk.BooleanVar(value=False)
         self.interval_var = tk.IntVar(value=120)
-        self.campus_network_enabled_var = tk.BooleanVar(value=True)
-        self.campus_wifi_name_var = tk.StringVar(value="WYU")
-        self.campus_login_url_var = tk.StringVar(value="")
-        self.campus_username_var = tk.StringVar(value="")
-        self.campus_password_var = tk.StringVar(value="")
         self.network_state_var = tk.StringVar(value="--")
         self.network_message_var = tk.StringVar(value="等待检测")
         self.network_updated_at_var = tk.StringVar(value="--")
@@ -117,7 +112,7 @@ class SettingsWindow:
         self.run_action(lambda: self.service.set_stability_enhancement(enabled))
 
     def confirm_clear_logs(self) -> None:
-        if not messagebox.askyesno("清空日志", "这会清空当前工作日志、守护日志、校园网诊断日志，并删除历史轮转日志。是否继续？"):
+        if not messagebox.askyesno("清空日志", "这会清空当前工作日志、守护日志、网络诊断日志，并删除历史轮转日志。是否继续？"):
             return
         self.run_action(self.service.clear_logs)
 
@@ -158,29 +153,6 @@ class SettingsWindow:
         self._start_background_action(
             lambda: getattr(self.service, action_name)(),
             message="正在执行网络操作...",
-        )
-
-    def refresh_campus_login_url(self) -> None:
-        try:
-            saved_payload = self._save_form_settings()
-            self._apply_payload(saved_payload, update_form=True)
-            payload = self.service.refresh_campus_login_url()
-        except Exception as exc:  # noqa: BLE001
-            self._show_error(exc)
-            return
-        self._apply_payload(payload, update_form=True)
-
-    def refresh_campus_login_url_async(self) -> None:
-        try:
-            saved_payload = self._save_form_settings()
-            self._apply_payload(saved_payload, update_form=True)
-        except Exception as exc:  # noqa: BLE001
-            self._show_error(exc)
-            return
-        self._start_background_action(
-            self.service.refresh_campus_login_url,
-            message="正在获取校园网登录地址...",
-            update_form=True,
         )
 
     def refresh_runtime_payload(self) -> None:
@@ -406,16 +378,10 @@ class SettingsWindow:
 
     def _apply_settings_form(self, settings: dict[str, Any]) -> None:
         monitoring = settings["networkMonitoring"]
-        campus_network = settings.get("campusNetwork") or {}
         self.network_enabled_var.set(bool(monitoring["enabled"]))
         self.interval_var.set(int(monitoring["intervalMinutes"]))
         self.preferred_wifi_text.delete("1.0", tk.END)
         self.preferred_wifi_text.insert("1.0", "\n".join(monitoring["preferredWifiNames"]))
-        self.campus_network_enabled_var.set(bool(campus_network.get("enabled", False)))
-        self.campus_wifi_name_var.set(str(campus_network.get("wifiName", "")))
-        self.campus_login_url_var.set(str(campus_network.get("loginUrl", "")))
-        self.campus_username_var.set(str(campus_network.get("username", "")))
-        self.campus_password_var.set(str(campus_network.get("password", "")))
 
     def _apply_runtime_payload(self, payload: dict[str, Any]) -> None:
         supervisor = payload["serviceSnapshot"]["supervisor"]
@@ -464,13 +430,6 @@ class SettingsWindow:
                 "enabled": self.network_enabled_var.get(),
                 "intervalMinutes": self.interval_var.get(),
                 "preferredWifiNames": self._collect_wifi_names(),
-            },
-            "campusNetwork": {
-                "enabled": self.campus_network_enabled_var.get(),
-                "wifiName": self.campus_wifi_name_var.get(),
-                "loginUrl": self.campus_login_url_var.get(),
-                "username": self.campus_username_var.get(),
-                "password": self.campus_password_var.get(),
             },
         }
 

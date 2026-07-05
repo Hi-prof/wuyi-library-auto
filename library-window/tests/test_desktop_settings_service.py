@@ -73,7 +73,7 @@ class DesktopSettingsServiceTestCase(unittest.TestCase):
         self.assertEqual(payload["networkStatus"]["networkState"], "online")
         self.assertEqual(payload["networkStatus"]["message"], "网络连接正常")
 
-    def test_run_switch_to_campus_wifi_refreshes_network_status(self) -> None:
+    def test_service_no_longer_exposes_campus_network_actions(self) -> None:
         desktop_settings_service = self._load_service_class()
 
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -81,41 +81,9 @@ class DesktopSettingsServiceTestCase(unittest.TestCase):
             config_path.write_text("{}", encoding="utf-8")
             service = desktop_settings_service(config_path)
 
-            with patch(
-                "wuyi_seat_bot.desktop_settings.service.NetworkMonitor.switch_to_campus_wifi_once",
-                return_value={
-                    "networkState": "online",
-                    "message": "已切换到 WYU 并恢复联网",
-                    "connectedInterfaces": ["WLAN"],
-                    "reconnectState": "reconnected",
-                    "wifiName": "WYU",
-                    "updatedAt": "2026-04-23T22:10:00",
-                },
-            ):
-                payload = service.run_switch_to_campus_wifi()
-
-        self.assertEqual(payload["message"], "已尝试切换到校园网")
-        self.assertEqual(payload["networkStatus"]["wifiName"], "WYU")
-        self.assertEqual(payload["networkStatus"]["reconnectState"], "reconnected")
-
-    def test_refresh_campus_login_url_writes_discovered_url(self) -> None:
-        desktop_settings_service = self._load_service_class()
-        discovered_url = "https://sso.wuyiu.edu.cn/login?service=https%3A%2F%2Fexample.com"
-
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            config_path = Path(tmp_dir) / "config.json"
-            config_path.write_text("{}", encoding="utf-8")
-            service = desktop_settings_service(config_path)
-
-            with patch(
-                "wuyi_seat_bot.desktop_settings.service.discover_campus_login_url",
-                return_value=discovered_url,
-            ) as discover_url:
-                payload = service.refresh_campus_login_url()
-
-        discover_url.assert_called_once()
-        self.assertEqual(payload["message"], "已获取校园网登录地址")
-        self.assertEqual(payload["settings"]["campusNetwork"]["loginUrl"], discovered_url)
+        self.assertFalse(hasattr(service, "run_campus_network_login"))
+        self.assertFalse(hasattr(service, "refresh_campus_login_url"))
+        self.assertFalse(hasattr(service, "run_switch_to_campus_wifi"))
 
     def test_get_payload_reads_existing_service_status_files(self) -> None:
         desktop_settings_service = self._load_service_class()
@@ -167,7 +135,8 @@ class DesktopSettingsServiceTestCase(unittest.TestCase):
         self.assertIn("worker line 3", preview)
         self.assertIn("守护日志", preview)
         self.assertIn("supervisor line 2", preview)
-        self.assertIn("校园网诊断", preview)
+        self.assertIn("网络诊断", preview)
+        self.assertNotIn("校园网诊断", preview)
         self.assertIn("campus line 2", preview)
 
     def test_clear_logs_truncates_current_logs_and_removes_backups(self) -> None:
@@ -216,7 +185,7 @@ class DesktopSettingsServiceTestCase(unittest.TestCase):
             command = popen.call_args.args[0]
             self.assertEqual(command[0], "notepad.exe")
             self.assertEqual(Path(command[1]).resolve(), network_monitor_log.resolve())
-            self.assertEqual(payload["message"], "已打开校园网诊断")
+            self.assertEqual(payload["message"], "已打开网络诊断")
 
     def test_diagnostics_page_contains_clear_logs_button(self) -> None:
         source = (Path(__file__).resolve().parents[1] / "src" / "wuyi_seat_bot" / "desktop_settings" / "page_builders.py").read_text(
@@ -225,4 +194,5 @@ class DesktopSettingsServiceTestCase(unittest.TestCase):
 
         self.assertIn("清空全部日志", source)
         self.assertIn("复制最近日志", source)
-        self.assertIn("校园网诊断", source)
+        self.assertIn("网络诊断", source)
+        self.assertNotIn("校园网诊断", source)

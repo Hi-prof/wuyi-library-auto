@@ -11,7 +11,7 @@ from wuyi_seat_bot.automation_plans import (
 
 
 class AutomationPlansTestCase(unittest.TestCase):
-    def test_build_automation_plan_runs_reserve_and_checkin_immediately_after_creation(
+    def test_build_automation_plan_schedules_reserve_at_custom_time_and_checkin_immediately(
         self,
     ) -> None:
         plan = build_automation_plan(
@@ -25,16 +25,39 @@ class AutomationPlansTestCase(unittest.TestCase):
             checkin_enabled=True,
             checkout_enabled=True,
             continuous_reserve=True,
-            reserve_time="08:00",
+            reserve_time="23:10",
             checkin_time="08:00",
             checkout_time="21:59",
             reserve_check_interval_minutes=30,
             now=datetime(2026, 3, 29, 22, 59, 44),
         )
 
-        self.assertEqual(plan.reserve_next_run_at, "2026-03-29T22:59:00")
+        self.assertEqual(plan.reserve_next_run_at, "2026-03-29T23:10:00")
         self.assertEqual(plan.checkin_next_run_at, "2026-03-29T22:59:00")
         self.assertEqual(plan.checkout_next_run_at, "2026-03-30T21:59:00")
+
+    def test_build_automation_plan_schedules_reserve_next_day_when_custom_time_passed(
+        self,
+    ) -> None:
+        plan = build_automation_plan(
+            account_name="main",
+            seat_url="https://example.com/seat/a",
+            seat_number="58",
+            selected_date="2026-03-30",
+            start_hour=8,
+            duration_hours=14,
+            reserve_enabled=True,
+            checkin_enabled=False,
+            checkout_enabled=False,
+            continuous_reserve=True,
+            reserve_time="23:10",
+            checkin_time="08:00",
+            checkout_time="21:59",
+            reserve_check_interval_minutes=30,
+            now=datetime(2026, 3, 29, 23, 11, 0),
+        )
+
+        self.assertEqual(plan.reserve_next_run_at, "2026-03-30T23:10:00")
 
     def test_scheduler_runs_due_action_and_updates_plan_state(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -58,7 +81,7 @@ class AutomationPlansTestCase(unittest.TestCase):
                 checkin_enabled=False,
                 checkout_enabled=False,
                 continuous_reserve=True,
-                reserve_time="07:00",
+                reserve_time="08:00",
                 checkin_time="08:00",
                 checkout_time="21:59",
                 reserve_check_interval_minutes=30,
@@ -96,7 +119,7 @@ class AutomationPlansTestCase(unittest.TestCase):
                 checkin_enabled=False,
                 checkout_enabled=False,
                 continuous_reserve=True,
-                reserve_time="07:00",
+                reserve_time="08:00",
                 checkin_time="08:00",
                 checkout_time="21:59",
                 reserve_check_interval_minutes=30,
@@ -129,6 +152,41 @@ class AutomationPlansTestCase(unittest.TestCase):
         self.assertEqual(saved_plan.reserve_target_dates, ("2026-03-29", "2026-03-30"))
         self.assertEqual(saved_plan.reserve_booked_dates, ("2026-03-29",))
         self.assertEqual(saved_plan.reserve_next_run_at, "2026-03-29T08:30:00")
+
+    def test_reserve_followup_uses_custom_time_as_interval_anchor(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            storage_path = Path(tmp_dir) / "automation-plans.json"
+            scheduler = LocalAutomationPlanScheduler(
+                storage_path,
+                execute_action=lambda plan, action, now: AutomationActionResult(
+                    message=f"{action} ok"
+                ),
+            )
+            plan = build_automation_plan(
+                account_name="main",
+                seat_url="https://example.com/seat/a",
+                seat_number="58",
+                selected_date="2026-03-29",
+                start_hour=8,
+                duration_hours=14,
+                reserve_enabled=True,
+                checkin_enabled=False,
+                checkout_enabled=False,
+                continuous_reserve=True,
+                reserve_time="07:10",
+                checkin_time="08:00",
+                checkout_time="21:59",
+                reserve_check_interval_minutes=30,
+                now=datetime(2026, 3, 29, 7, 0),
+            )
+            scheduler.save_plan(plan)
+
+            executed = scheduler.run_due_once(datetime(2026, 3, 29, 7, 10))
+            saved_plan = scheduler.get_plan(plan.plan_id)
+
+        self.assertTrue(executed)
+        self.assertIsNotNone(saved_plan)
+        self.assertEqual(saved_plan.reserve_next_run_at, "2026-03-29T07:40:00")
 
     def test_scheduler_wait_timeout_runs_immediate_checkin_without_waiting(
         self,

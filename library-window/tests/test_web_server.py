@@ -1554,7 +1554,7 @@ class WebServerHelpersTestCase(unittest.TestCase):
             ],
         )
 
-    def test_execute_automation_reserve_only_books_missing_dates(self) -> None:
+    def test_execute_automation_reserve_books_all_missing_interface_dates(self) -> None:
         app = object.__new__(SeatWebApp)
         runtime = SimpleNamespace(
             config=AppConfig(
@@ -1622,19 +1622,21 @@ class WebServerHelpersTestCase(unittest.TestCase):
             call.kwargs["filters"].date_value
             for call in app._reserve_by_seat_number.call_args_list
         ]
-        self.assertEqual(reserved_dates, ["2026-03-29", "2026-03-30"])
+        self.assertEqual(reserved_dates, ["2026-03-29", "2026-03-30", "2026-03-31"])
         self.assertEqual(
             [
                 call.kwargs["reason"]
                 for call in app._wait_automation_reserve_gap.call_args_list
             ],
-            ["between-attempts"],
+            ["between-attempts", "between-attempts"],
         )
         self.assertEqual(
-            result.target_dates, ("2026-03-28", "2026-03-29", "2026-03-30")
+            result.target_dates,
+            ("2026-03-28", "2026-03-29", "2026-03-30", "2026-03-31"),
         )
         self.assertEqual(
-            result.booked_dates, ("2026-03-28", "2026-03-29", "2026-03-30")
+            result.booked_dates,
+            ("2026-03-28", "2026-03-29", "2026-03-30", "2026-03-31"),
         )
 
     def test_execute_automation_reserve_refreshes_entry_context_before_building_target_dates(
@@ -2573,6 +2575,10 @@ class WebServerHelpersTestCase(unittest.TestCase):
             SeatWebRequestHandler.POST_JSON_ROUTES[
                 "/api/settings/network/check"
             ][2]
+        )
+        self.assertNotIn(
+            "/api/settings/network/campus-login",
+            SeatWebRequestHandler.POST_JSON_ROUTES,
         )
         # spec account-pool-tri-sync 11.13: Manual_Sync_Action 后端入口。
         self.assertEqual(

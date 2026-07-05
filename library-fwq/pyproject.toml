@@ -29,4 +29,4 @@ package-dir = {"" = "src"}
 where = ["src"]
 
 [tool.setuptools.package-data]
-prevent_auto = ["web/templates/**/*.html", "web/static/css/*.css", "web/static/js/*.js"]
+prevent_auto = ["web/templates/**/*.html", "web/static/*.css", "web/static/css/*.css", "web/static/js/*.js"]

@@ -87,6 +87,19 @@ class ClientTokensWebTestCase(unittest.TestCase):
         # 未签发时不应渲染明文展示横幅
         self.assertNotIn("data-issued-token-banner", response.text)
 
+    def test_token_table_uses_mobile_responsive_card_markup(self) -> None:
+        self.login()
+        self.repository().issue(label="android-handheld", client_kind="android")
+
+        response = self.client.get("/client-tokens")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('class="responsive-table-shell"', response.text)
+        self.assertIn('class="responsive-table-card"', response.text)
+        self.assertIn('data-label="ID"', response.text)
+        self.assertIn('data-label="备注"', response.text)
+        self.assertIn('data-label="操作"', response.text)
+
     def test_issue_redirects_with_one_time_plaintext(self) -> None:
         self.login()
 

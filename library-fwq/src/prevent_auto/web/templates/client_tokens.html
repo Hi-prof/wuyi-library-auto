@@ -69,82 +69,84 @@
     </form>
   </div>
   {% if tokens %}
-  <table>
-    <thead>
-      <tr>
-        <th>ID</th>
-        <th>备注</th>
-        <th>客户端</th>
-        <th>Token 预览</th>
-        <th>签发时间</th>
-        <th>撤销时间</th>
-        <th>状态</th>
-        <th>操作</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for token in tokens %}
-      <tr>
-        <td>#{{ token.id }}</td>
-        <td>{{ token.label }}</td>
-        <td>{{ token.client_kind_label }}</td>
-        <td>
-          {% if issued_token and issued_id == token.id %}
-          <code class="token-preview" id="token-full-{{ token.id }}">{{ issued_token }}</code>
-          <button
-            class="button ghost compact copy-button"
-            type="button"
-            data-copy-source="token-full-{{ token.id }}"
-            data-default-label="复制"
-            title="复制完整 Token（仅本次可见）"
-          >复制</button>
-          {% elif token.token_preview %}
-          <code class="token-preview" id="token-preview-{{ token.id }}">{{ token.token_preview }}</code>
-          <button
-            class="button ghost compact copy-button"
-            type="button"
-            data-copy-source="token-preview-{{ token.id }}"
-            data-default-label="复制"
-            title="复制 Token 预览（仅头尾片段，用于比对识别）"
-          >复制</button>
-          {% else %}
-          <span class="empty-state" title="历史记录无明文片段，仅新签发的 Token 提供预览">—</span>
-          {% endif %}
-        </td>
-        <td>{{ format_datetime(token.created_at, default="-") }}</td>
-        <td>{{ format_datetime(token.revoked_at, default="-") }}</td>
-        <td>
-          {% if token.revoked_at %}
-          <span class="status-pill muted">已撤销</span>
-          {% else %}
-          <span class="status-pill success">有效</span>
-          {% endif %}
-        </td>
-        <td>
-          {% if not token.revoked_at %}
-          <form
-            class="inline-form"
-            method="post"
-            action="/client-tokens/{{ token.id }}/revoke"
-            data-confirm-message="撤销后将立即失效，确认撤销 {{ token.label }}？"
-          >
-            <button class="button danger" type="submit">撤销</button>
-          </form>
-          {% else %}
-          <form
-            class="inline-form"
-            method="post"
-            action="/client-tokens/{{ token.id }}/delete"
-            data-confirm-message="删除后记录不可恢复，确认删除 {{ token.label }}？"
-          >
-            <button class="button danger" type="submit">删除</button>
-          </form>
-          {% endif %}
-        </td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
+  <div class="responsive-table-shell">
+    <table class="responsive-table-card">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>备注</th>
+          <th>客户端</th>
+          <th>Token 预览</th>
+          <th>签发时间</th>
+          <th>撤销时间</th>
+          <th>状态</th>
+          <th>操作</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for token in tokens %}
+        <tr>
+          <td data-label="ID">#{{ token.id }}</td>
+          <td data-label="备注">{{ token.label }}</td>
+          <td data-label="客户端">{{ token.client_kind_label }}</td>
+          <td data-label="Token 预览">
+            {% if issued_token and issued_id == token.id %}
+            <code class="token-preview" id="token-full-{{ token.id }}">{{ issued_token }}</code>
+            <button
+              class="button ghost compact copy-button"
+              type="button"
+              data-copy-source="token-full-{{ token.id }}"
+              data-default-label="复制"
+              title="复制完整 Token（仅本次可见）"
+            >复制</button>
+            {% elif token.token_preview %}
+            <code class="token-preview" id="token-preview-{{ token.id }}">{{ token.token_preview }}</code>
+            <button
+              class="button ghost compact copy-button"
+              type="button"
+              data-copy-source="token-preview-{{ token.id }}"
+              data-default-label="复制"
+              title="复制 Token 预览（仅头尾片段，用于比对识别）"
+            >复制</button>
+            {% else %}
+            <span class="empty-state" title="历史记录无明文片段，仅新签发的 Token 提供预览">—</span>
+            {% endif %}
+          </td>
+          <td data-label="签发时间">{{ format_datetime(token.created_at, default="-") }}</td>
+          <td data-label="撤销时间">{{ format_datetime(token.revoked_at, default="-") }}</td>
+          <td data-label="状态">
+            {% if token.revoked_at %}
+            <span class="status-pill muted">已撤销</span>
+            {% else %}
+            <span class="status-pill success">有效</span>
+            {% endif %}
+          </td>
+          <td class="actions" data-label="操作">
+            {% if not token.revoked_at %}
+            <form
+              class="inline-form"
+              method="post"
+              action="/client-tokens/{{ token.id }}/revoke"
+              data-confirm-message="撤销后将立即失效，确认撤销 {{ token.label }}？"
+            >
+              <button class="button danger" type="submit">撤销</button>
+            </form>
+            {% else %}
+            <form
+              class="inline-form"
+              method="post"
+              action="/client-tokens/{{ token.id }}/delete"
+              data-confirm-message="删除后记录不可恢复，确认删除 {{ token.label }}？"
+            >
+              <button class="button danger" type="submit">删除</button>
+            </form>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
   {% else %}
   <p class="empty-state">暂未签发任何客户端 Token。</p>
   {% endif %}
