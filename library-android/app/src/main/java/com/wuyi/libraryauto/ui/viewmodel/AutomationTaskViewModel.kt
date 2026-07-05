@@ -52,6 +52,7 @@ class AutomationTaskViewModel(
 
     private var allPlans: List<AutomationPlanRecord> = emptyList()
     private var reservationChecks: Map<String, AutomationTaskReservationCheckUiState> = emptyMap()
+    private var createFromBookingsRequestId = 0
 
     init {
         observePlans()
@@ -390,6 +391,8 @@ class AutomationTaskViewModel(
     }
 
     fun openCreateFromBookingsDialog() {
+        createFromBookingsRequestId += 1
+        val requestId = createFromBookingsRequestId
         val executor = accountSeatActionExecutor
         if (executor == null) {
             uiState =
@@ -427,6 +430,9 @@ class AutomationTaskViewModel(
                             .thenByDescending { it.canCreate }
                             .thenBy { it.studentId },
                     )
+            if (requestId != createFromBookingsRequestId || !uiState.createFromBookingsDialog.visible) {
+                return@launch
+            }
             uiState =
                 uiState.copy(
                     createFromBookingsDialog =
@@ -445,6 +451,7 @@ class AutomationTaskViewModel(
     }
 
     fun closeCreateFromBookingsDialog() {
+        createFromBookingsRequestId += 1
         uiState = uiState.copy(createFromBookingsDialog = CreateFromBookingsDialogState())
     }
 

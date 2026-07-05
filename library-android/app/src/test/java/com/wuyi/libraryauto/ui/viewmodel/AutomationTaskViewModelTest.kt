@@ -31,6 +31,7 @@ import com.wuyi.libraryauto.ui.repository.task.SeatBookingSnapshotView
 import java.time.Clock
 import java.time.Instant
 import java.time.ZoneId
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -550,6 +551,7 @@ class AutomationTaskViewModelTest {
 
     @Test
     fun `closeCreateFromBookingsDialog keeps stale booking load result from reopening sheet`() = runTest {
+        val allowLoad = CompletableDeferred<Unit>()
         val viewModel =
             buildViewModel(
                 accountSeatActionExecutor =
@@ -564,12 +566,14 @@ class AutomationTaskViewModelTest {
                                         ),
                                     ),
                             ),
+                        beforeLoadActiveBookings = { allowLoad.await() },
                     ),
             )
         advanceUntilIdle()
 
         viewModel.openCreateFromBookingsDialog()
         viewModel.closeCreateFromBookingsDialog()
+        allowLoad.complete(Unit)
         advanceUntilIdle()
 
         assertThat(viewModel.uiState.createFromBookingsDialog.visible).isFalse()
@@ -853,12 +857,15 @@ class AutomationTaskViewModelTest {
 
     private class FakeAccountSeatActionExecutor(
         private val activeBookings: Map<String, List<SeatBookingSnapshotView>> = emptyMap(),
+        private val beforeLoadActiveBookings: suspend () -> Unit = {},
     ) : AccountSeatActionExecutor {
         override suspend fun loadSnapshot(studentId: String): SeatBookingSnapshotView =
             activeBookings[studentId]?.firstOrNull() ?: SeatBookingSnapshotView()
 
-        override suspend fun loadActiveBookings(studentId: String): List<SeatBookingSnapshotView> =
-            activeBookings[studentId].orEmpty()
+        override suspend fun loadActiveBookings(studentId: String): List<SeatBookingSnapshotView> {
+            beforeLoadActiveBookings()
+            return activeBookings[studentId].orEmpty()
+        }
 
         override suspend fun performAction(
             studentId: String,
