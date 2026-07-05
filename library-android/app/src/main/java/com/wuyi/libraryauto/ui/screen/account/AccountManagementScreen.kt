@@ -39,7 +39,6 @@ import androidx.compose.material.icons.outlined.PersonAdd
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.VerifiedUser
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
@@ -52,10 +51,11 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -299,63 +299,24 @@ fun AccountManagementScreen(
     }
 
     if (pendingDeleteAccount != null) {
-        AlertDialog(
-            onDismissRequest = viewModel::cancelRemoveAccount,
-            icon = {
-                Icon(
-                    imageVector = Icons.Outlined.Error,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.error,
-                )
-            },
-            title = { Text("确认删除账号") },
-            text = { Text("确定删除账号 ${pendingDeleteAccount.studentId} 吗？删除后会同时移除该账号保存的会话，无法撤销。") },
-            confirmButton = {
-                TextButton(
-                    onClick = viewModel::confirmRemoveAccount,
-                    colors =
-                        ButtonDefaults.textButtonColors(
-                            contentColor = MaterialTheme.colorScheme.error,
-                        ),
-                ) { Text("确认删除") }
-            },
-            dismissButton = {
-                TextButton(onClick = viewModel::cancelRemoveAccount) { Text("取消") }
-            },
+        AccountDeleteConfirmationSheet(
+            presentation =
+                buildSingleAccountDeleteConfirmationPresentation(
+                    studentId = pendingDeleteAccount.studentId,
+                ),
+            onConfirm = viewModel::confirmRemoveAccount,
+            onDismiss = viewModel::cancelRemoveAccount,
         )
     }
 
     if (pendingBulkDeleteTargets.isNotEmpty()) {
-        AlertDialog(
-            onDismissRequest = viewModel::cancelBulkDelete,
-            icon = {
-                Icon(
-                    imageVector = Icons.Outlined.Error,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.error,
-                )
-            },
-            title = { Text(stringResource(R.string.account_bulk_action_confirm_delete_title)) },
-            text = {
-                Text(
-                    stringResource(
-                        R.string.account_bulk_action_confirm_delete_body,
-                        pendingBulkDeleteTargets.size,
-                    ),
-                )
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = viewModel::confirmBulkDelete,
-                    colors =
-                        ButtonDefaults.textButtonColors(
-                            contentColor = MaterialTheme.colorScheme.error,
-                        ),
-                ) { Text("确认删除") }
-            },
-            dismissButton = {
-                TextButton(onClick = viewModel::cancelBulkDelete) { Text("取消") }
-            },
+        AccountDeleteConfirmationSheet(
+            presentation =
+                buildBulkAccountDeleteConfirmationPresentation(
+                    selectedCount = pendingBulkDeleteTargets.size,
+                ),
+            onConfirm = viewModel::confirmBulkDelete,
+            onDismiss = viewModel::cancelBulkDelete,
         )
     }
 
@@ -394,6 +355,92 @@ fun AccountManagementScreen(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
+private fun AccountDeleteConfirmationSheet(
+    presentation: AccountDeleteConfirmationPresentation,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+    ) {
+        Column(
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp)
+                    .padding(bottom = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.Top,
+            ) {
+                Surface(
+                    color = MaterialTheme.colorScheme.errorContainer,
+                    contentColor = MaterialTheme.colorScheme.onErrorContainer,
+                    shape = RoundedCornerShape(14.dp),
+                    modifier = Modifier.size(44.dp),
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = Icons.Outlined.Error,
+                            contentDescription = null,
+                            modifier = Modifier.size(22.dp),
+                        )
+                    }
+                }
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Text(
+                        text = presentation.title,
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    StatusBadge(
+                        text = presentation.badgeLabel,
+                        tone = presentation.badgeTone,
+                    )
+                    Text(
+                        text = presentation.message,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                OutlinedButton(
+                    onClick = onDismiss,
+                    modifier = Modifier.weight(1f).heightIn(min = 52.dp),
+                    shape = RoundedCornerShape(14.dp),
+                ) {
+                    Text(presentation.dismissAction.label)
+                }
+                FilledTonalButton(
+                    onClick = onConfirm,
+                    modifier = Modifier.weight(1f).heightIn(min = 52.dp),
+                    shape = RoundedCornerShape(14.dp),
+                    colors =
+                        ButtonDefaults.filledTonalButtonColors(
+                            containerColor = MaterialTheme.colorScheme.errorContainer,
+                            contentColor = MaterialTheme.colorScheme.onErrorContainer,
+                        ),
+                ) {
+                    Text(presentation.confirmAction.label)
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
 private fun AccountTopBar(
     accountCount: Int,
     refreshAllState: AccountRefreshAllState,
@@ -406,15 +453,23 @@ private fun AccountTopBar(
     onEnterMultiSelect: () -> Unit,
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
+    val presentation =
+        buildAccountTopBarPresentation(
+            accountCount = accountCount,
+            refreshAllState = refreshAllState,
+            batchCheckInState = batchCheckInState,
+            isAnyBatchActive = isAnyBatchActive,
+            batchCheckInEnabled = batchCheckInEnabled,
+        )
     TopAppBar(
         title = {
             Column {
                 Text(
-                    text = "账号列表",
+                    text = presentation.title,
                     style = MaterialTheme.typography.titleLarge,
                 )
                 Text(
-                    text = "共 $accountCount 个账号",
+                    text = presentation.subtitle,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -423,16 +478,11 @@ private fun AccountTopBar(
         actions = {
             IconButton(
                 onClick = onRefreshAll,
-                enabled = accountCount > 0 && !isAnyBatchActive,
+                enabled = presentation.refreshAction.enabled,
             ) {
                 Icon(
                     imageVector = Icons.Outlined.Refresh,
-                    contentDescription =
-                        if (refreshAllState is AccountRefreshAllState.Running) {
-                            stringResource(R.string.account_refresh_all_running)
-                        } else {
-                            stringResource(R.string.account_refresh_all_label)
-                        },
+                    contentDescription = presentation.refreshAction.contentDescription,
                 )
             }
             Box {
@@ -443,15 +493,11 @@ private fun AccountTopBar(
                     expanded = menuExpanded,
                     onDismissRequest = { menuExpanded = false },
                 ) {
-                    if (batchCheckInEnabled) {
+                    presentation.batchCheckInAction?.let { action ->
                         DropdownMenuItem(
-                            text = {
-                                Text(
-                                    if (batchCheckInState is BatchCheckInState.Running) "签到中..." else "全部签到",
-                                )
-                            },
+                            text = { Text(action.label) },
                             leadingIcon = { Icon(Icons.Outlined.DoneAll, contentDescription = null) },
-                            enabled = !isAnyBatchActive && accountCount > 0,
+                            enabled = action.enabled,
                             onClick = {
                                 menuExpanded = false
                                 onStartBatchCheckIn()
@@ -459,18 +505,18 @@ private fun AccountTopBar(
                         )
                     }
                     DropdownMenuItem(
-                        text = { Text(stringResource(R.string.account_bulk_import_title)) },
+                        text = { Text(presentation.importAction.label) },
                         leadingIcon = { Icon(Icons.Outlined.FileUpload, contentDescription = null) },
-                        enabled = !isAnyBatchActive,
+                        enabled = presentation.importAction.enabled,
                         onClick = {
                             menuExpanded = false
                             onOpenBulkImport()
                         },
                     )
                     DropdownMenuItem(
-                        text = { Text(stringResource(R.string.account_bulk_action_enter)) },
+                        text = { Text(presentation.multiSelectAction.label) },
                         leadingIcon = { Icon(Icons.Outlined.Checklist, contentDescription = null) },
-                        enabled = !isAnyBatchActive && accountCount > 0,
+                        enabled = presentation.multiSelectAction.enabled,
                         onClick = {
                             menuExpanded = false
                             onEnterMultiSelect()
@@ -481,7 +527,7 @@ private fun AccountTopBar(
         },
         colors =
             TopAppBarDefaults.topAppBarColors(
-                containerColor = MaterialTheme.colorScheme.surface,
+                containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
                 scrolledContainerColor = MaterialTheme.colorScheme.surfaceContainer,
                 titleContentColor = MaterialTheme.colorScheme.onSurface,
                 actionIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -709,26 +755,15 @@ private fun SavedAccountCard(
     // 视觉一致：所有账号卡片默认都折叠成单行摘要，
     // 不在卡片上展示预约列表与签到/签退/取消按钮，
     // 操作统一进入详情 BottomSheet 处理，避免误触。
-    val activeBookings = account.activeBookings
-    val firstBooking = activeBookings.firstOrNull()
+    val presentation = buildAccountCardPresentation(account)
     val cardContainer =
         if (selected) {
             MaterialTheme.colorScheme.secondaryContainer
         } else {
-            MaterialTheme.colorScheme.surface
+            MaterialTheme.colorScheme.surfaceContainerLow
         }
     // 行 1（紧凑）"自习室圆形二楼（111），签到成功"
     // 行 2（小字）时间 + 多预约提示
-    val bookingPrimaryText = firstBooking?.let { booking ->
-        formatBookingPrimary(booking, account)
-    }.orEmpty()
-    val bookingSecondaryText = firstBooking?.let { booking ->
-        val parts = mutableListOf<String>()
-        if (booking.beginLabel.isNotBlank()) parts.add(booking.beginLabel)
-        if (activeBookings.size > 1) parts.add("等 ${activeBookings.size} 条")
-        parts.joinToString(" · ")
-    }.orEmpty()
-
     Surface(
         color = cardContainer,
         shape = RoundedCornerShape(20.dp),
@@ -750,7 +785,7 @@ private fun SavedAccountCard(
                     onCheckedChange = { onClickCard() },
                 )
             } else {
-                AccountAvatar(studentId = account.studentId)
+                AccountAvatar(studentId = account.studentId, initials = presentation.initials)
             }
             Column(
                 modifier = Modifier.weight(1f),
@@ -766,16 +801,16 @@ private fun SavedAccountCard(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     StatusBadge(
-                        text = if (account.isAuthenticated) "已认证" else "未认证",
-                        tone = if (account.isAuthenticated) StatusTone.Info else StatusTone.Warning,
+                        text = presentation.authLabel,
+                        tone = presentation.authTone,
                         icon = Icons.Outlined.VerifiedUser,
                     )
                     // 没有活跃预约时才显示目标座位徽章，避免和下方预约信息撞车
-                    if (firstBooking == null && account.preferredSeatLabel.isNotBlank()) {
-                        StatusBadge(text = account.preferredSeatLabel, tone = StatusTone.Neutral)
+                    presentation.preferredSeatBadge?.let { preferredSeat ->
+                        StatusBadge(text = preferredSeat, tone = StatusTone.Neutral)
                     }
                 }
-                if (firstBooking != null) {
+                if (presentation.bookingPrimaryText != null) {
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
                         verticalAlignment = Alignment.CenterVertically,
@@ -787,23 +822,23 @@ private fun SavedAccountCard(
                             modifier = Modifier.size(14.dp),
                         )
                         Text(
-                            text = bookingPrimaryText,
+                            text = presentation.bookingPrimaryText,
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurface,
                             maxLines = 1,
                         )
                     }
-                    if (bookingSecondaryText.isNotBlank()) {
+                    presentation.bookingSecondaryText?.let { secondaryText ->
                         Text(
-                            text = bookingSecondaryText,
+                            text = secondaryText,
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             maxLines = 1,
                         )
                     }
-                } else if (account.statusSummary.isNotBlank()) {
+                } else if (presentation.statusSummary != null) {
                     Text(
-                        text = account.statusSummary,
+                        text = presentation.statusSummary,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
@@ -821,6 +856,54 @@ private fun SavedAccountCard(
     }
 }
 
+internal data class AccountCardPresentation(
+    val authLabel: String,
+    val authTone: StatusTone,
+    val preferredSeatBadge: String?,
+    val bookingPrimaryText: String?,
+    val bookingSecondaryText: String?,
+    val statusSummary: String?,
+    val initials: String,
+)
+
+internal fun buildAccountCardPresentation(account: SavedAccountEntry): AccountCardPresentation {
+    val activeBookings = account.activeBookings
+    val firstBooking = activeBookings.firstOrNull()
+    return AccountCardPresentation(
+        authLabel = if (account.isAuthenticated) "已认证" else "未认证",
+        authTone = if (account.isAuthenticated) StatusTone.Info else StatusTone.Warning,
+        preferredSeatBadge =
+            if (firstBooking == null) {
+                account.preferredSeatLabel.trim().takeIf(String::isNotBlank)
+            } else {
+                null
+            },
+        bookingPrimaryText = firstBooking?.let(::formatBookingPrimary),
+        bookingSecondaryText = firstBooking?.let { booking ->
+            formatBookingSecondary(booking = booking, activeBookingCount = activeBookings.size)
+        },
+        statusSummary =
+            if (firstBooking == null) {
+                account.statusSummary.trim().takeIf(String::isNotBlank)
+            } else {
+                null
+            },
+        initials = accountInitials(account.studentId),
+    )
+}
+
+internal fun accountInitials(studentId: String): String =
+    studentId.trim().takeLast(2).ifBlank { "--" }
+
+private fun formatBookingSecondary(
+    booking: AccountBookingEntry,
+    activeBookingCount: Int,
+): String? =
+    buildList {
+        booking.beginLabel.trim().takeIf(String::isNotBlank)?.let(::add)
+        if (activeBookingCount > 1) add("等 $activeBookingCount 条")
+    }.joinToString(" · ").takeIf(String::isNotBlank)
+
 /**
  * 把单条预约压成一行紧凑展示："自习室圆形二楼（111），签到成功"。
  *
@@ -829,17 +912,15 @@ private fun SavedAccountCard(
  *   避免和卡片上半部的状态摘要重复又被截断；
  * - 缺少房间名/座位号时优雅降级，不抛硬编码占位符。
  */
-private fun formatBookingPrimary(
-    booking: AccountBookingEntry,
-    @Suppress("UNUSED_PARAMETER") account: SavedAccountEntry,
-): String {
+internal fun formatBookingPrimary(booking: AccountBookingEntry): String {
+    val roomName = booking.roomName.trim()
+    val seatNumber = booking.seatNumber.trim()
     val location =
         when {
-            booking.roomName.isNotBlank() && booking.seatNumber.isNotBlank() ->
-                "${booking.roomName}（${booking.seatNumber}）"
-            booking.roomName.isNotBlank() -> booking.roomName
-            booking.seatNumber.isNotBlank() -> "座位 ${booking.seatNumber}"
-            else -> "预约 ${booking.bookingId.takeLast(6)}"
+            roomName.isNotBlank() && seatNumber.isNotBlank() -> "$roomName（$seatNumber）"
+            roomName.isNotBlank() -> roomName
+            seatNumber.isNotBlank() -> "座位 $seatNumber"
+            else -> "预约 ${booking.bookingId.trim().takeLast(6).ifBlank { "--" }}"
         }
     val status = booking.statusLabel.substringBefore('，').substringBefore(',').trim()
     return if (status.isBlank()) location else "$location，$status"
@@ -873,8 +954,8 @@ private fun FooterMeta(
 @Composable
 internal fun AccountAvatar(
     studentId: String,
+    initials: String = accountInitials(studentId),
 ) {
-    val initials = studentId.takeLast(2).ifBlank { "--" }
     Box(
         modifier =
             Modifier

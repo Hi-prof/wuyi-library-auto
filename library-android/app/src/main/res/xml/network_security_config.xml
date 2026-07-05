@@ -7,11 +7,6 @@
         </trust-anchors>
     </base-config>
 
-    <!-- 允许校园网认证服务器使用明文 HTTP 通信 -->
-    <domain-config cleartextTrafficPermitted="true">
-        <domain includeSubdomains="false">10.10.244.11</domain>
-    </domain-config>
-
     <!-- 允许本地环回地址使用明文 HTTP（便于本机调试） -->
     <domain-config cleartextTrafficPermitted="true">
         <domain includeSubdomains="true">localhost</domain>

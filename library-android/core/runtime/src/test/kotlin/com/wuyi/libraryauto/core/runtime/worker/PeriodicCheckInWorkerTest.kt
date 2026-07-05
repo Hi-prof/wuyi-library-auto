@@ -24,8 +24,7 @@ class PeriodicCheckInWorkerTest {
 
         assertThat(request.workSpec.intervalDuration).isEqualTo(TimeUnit.MINUTES.toMillis(30))
         assertThat(request.workSpec.flexDuration).isEqualTo(TimeUnit.MINUTES.toMillis(10))
-        // BUG-CAPTIVE 修复：移除了 NetworkType.CONNECTED 约束，避免校园网未通过校验时
-        // WorkManager 直接不调度。真实网络判定改在 doWork 内由 BackgroundNetworkRecoveryCoordinator 完成。
+        // Keep scheduling independent from connectivity; request failures are handled by the worker and backoff.
         assertThat(request.workSpec.constraints.requiredNetworkType).isEqualTo(NetworkType.NOT_REQUIRED)
         assertThat(request.workSpec.backoffPolicy).isEqualTo(BackoffPolicy.LINEAR)
         assertThat(request.workSpec.backoffDelayDuration).isEqualTo(TimeUnit.SECONDS.toMillis(60))

@@ -28,7 +28,7 @@ import org.robolectric.annotation.Config
  * - 缓存的查询/观察接口可读到 Worker 写入的数据。
  *
  * 使用 `@Config(application = Application::class)` 让 Robolectric 跑朴素 Application，绕过
- * `@HiltAndroidApp` 默认初始化对生产依赖（CaptivePortalRecoveryProvider 等）的需求。
+ * `@HiltAndroidApp` 默认初始化对生产依赖的需求。
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(application = Application::class, sdk = [26])

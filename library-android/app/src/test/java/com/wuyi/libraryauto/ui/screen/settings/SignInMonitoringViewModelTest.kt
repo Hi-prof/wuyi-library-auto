@@ -2,6 +2,7 @@ package com.wuyi.libraryauto.ui.screen.settings
 
 import com.google.common.truth.Truth.assertThat
 import com.wuyi.libraryauto.ui.viewmodel.MainDispatcherRule
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceTimeBy
@@ -11,6 +12,7 @@ import kotlinx.coroutines.test.runTest
 import org.junit.Rule
 import org.junit.Test
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class SignInMonitoringViewModelTest {
     private val dispatcher = StandardTestDispatcher()
 

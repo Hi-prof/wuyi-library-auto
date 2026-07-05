@@ -13,7 +13,7 @@ import com.wuyi.libraryauto.core.storage.db.buildReservationTaskId
  * GuardWorker。覆盖三个触发场景：
  *
  * 1. 用户/管理员在网页或别的端预约了座位（App 没经手）；
- * 2. App 启动 / 网络恢复 / 校园网认证恢复 / 登录成功后，需要把缺失的 Guard 任务补齐；
+ * 2. App 启动 / 登录成功 / 周期巡检后，需要把缺失的 Guard 任务补齐；
  * 3. 周期签到运行时把 mutex registry 的过期 bookingId 一并清理，避免 20+ 账号下
  *    `BookingCheckInMutexRegistry` 长期累积。
  *

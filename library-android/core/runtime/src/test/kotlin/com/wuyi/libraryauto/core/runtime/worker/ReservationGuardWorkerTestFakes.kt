@@ -9,7 +9,6 @@ import com.wuyi.libraryauto.core.network.seat.BookingDetail
 import com.wuyi.libraryauto.core.network.seat.SeatBookingActionResult
 import com.wuyi.libraryauto.core.network.seat.SeatBookingLiveState
 import com.wuyi.libraryauto.core.network.seat.SeatBookingSnapshot
-import com.wuyi.libraryauto.core.runtime.network.NetworkRecoveryResult
 import com.wuyi.libraryauto.core.storage.credentials.SavedAccountStore
 import com.wuyi.libraryauto.core.storage.db.ExecutionLogEntity
 import com.wuyi.libraryauto.core.storage.db.ReservationTaskEntity
@@ -45,8 +44,6 @@ internal class FakeGuardWorkerDependencies(
     var lastCheckInBookingId: String? = null
     var lastScanBookingId: String? = null
     var lastExpectedMinors: Set<Int>? = null
-    var networkRecoveryResult = NetworkRecoveryResult(recovered = true, message = "当前网络可用")
-    var networkRecoveryCallCount = 0
     var loginCallCount = 0
     var checkInCallCount = 0
     var refreshLoginCallCount = 0
@@ -55,11 +52,6 @@ internal class FakeGuardWorkerDependencies(
     override suspend fun findTask(taskId: String): ReservationTaskEntity? {
         lastFindTaskId = taskId
         return task.copy(id = taskId)
-    }
-
-    override suspend fun ensureNetworkForBackgroundWork(): NetworkRecoveryResult {
-        networkRecoveryCallCount += 1
-        return networkRecoveryResult
     }
 
     override fun loadSavedAccount(studentId: String): SavedAccountStore.SavedAccount =

@@ -1,20 +1,15 @@
 package com.wuyi.libraryauto.ui.navigation
 
 import android.content.Context
-import android.net.ConnectivityManager
-import android.net.wifi.WifiManager
 import com.wuyi.libraryauto.core.domain.usecase.BuildContinuousReservationWindowsUseCase
 import com.wuyi.libraryauto.core.domain.usecase.TriggerSource
 import com.wuyi.libraryauto.core.network.auth.SchoolAuthService
-import com.wuyi.libraryauto.core.network.captive.CampusPortalAuthenticator
-import com.wuyi.libraryauto.core.network.captive.OkHttpTargetReachabilityProbe
 import com.wuyi.libraryauto.core.network.seat.CookieSchoolSeatApi
 import com.wuyi.libraryauto.core.network.seat.SeatBookingActionService
 import com.wuyi.libraryauto.core.network.seat.SeatBookingStatusService
 import com.wuyi.libraryauto.core.network.seat.SeatLookupService
 import com.wuyi.libraryauto.core.network.seat.SeatReservationService
 import com.wuyi.libraryauto.core.runtime.diagnostics.LocalDiagnosticLogRepository
-import com.wuyi.libraryauto.core.runtime.network.NetworkMonitorMetricsRepository
 import com.wuyi.libraryauto.core.runtime.watchdog.WatchdogHeartbeatStore
 import com.wuyi.libraryauto.core.runtime.watchdog.WatchdogStateStore
 import com.wuyi.libraryauto.core.runtime.worker.AutomationPlanScheduler
@@ -25,8 +20,6 @@ import com.wuyi.libraryauto.core.storage.audit.SignInAuditRepository
 import com.wuyi.libraryauto.core.storage.credentials.CredentialStore
 import com.wuyi.libraryauto.core.storage.credentials.SavedAccountStore
 import com.wuyi.libraryauto.core.storage.db.StorageDatabaseProvider
-import com.wuyi.libraryauto.core.storage.network.CampusNetworkCredentialStore
-import com.wuyi.libraryauto.core.storage.network.WifiReconnectStore
 import com.wuyi.libraryauto.sync.AccountPoolApi
 import com.wuyi.libraryauto.sync.AccountPoolApiFactory
 import com.wuyi.libraryauto.sync.AccountPoolSyncRepository
@@ -38,6 +31,7 @@ import com.wuyi.libraryauto.sync.SyncStatusIndicator
 import com.wuyi.libraryauto.ui.repository.account.StoredSavedAccountRepository
 import com.wuyi.libraryauto.ui.repository.auth.SchoolLoginGateway
 import com.wuyi.libraryauto.ui.repository.SchoolPortalConfig
+import com.wuyi.libraryauto.ui.repository.home.TodayOverviewRepository
 import com.wuyi.libraryauto.ui.repository.settings.DiagnosticsLogRepository
 import com.wuyi.libraryauto.ui.repository.settings.ExecutionLogRepository
 import com.wuyi.libraryauto.ui.repository.settings.LoginAuditRepository
@@ -51,6 +45,7 @@ import com.wuyi.libraryauto.ui.repository.seat.ReservationGuardScheduler
 import com.wuyi.libraryauto.ui.repository.seat.ResolvedSeatUrlRepository
 import com.wuyi.libraryauto.ui.repository.seat.SeatDisplayRepository
 import com.wuyi.libraryauto.ui.repository.seat.SeatLookupRepository
+import com.wuyi.libraryauto.ui.repository.seat.SmartSeatRecommender
 import com.wuyi.libraryauto.ui.repository.session.PersistentSessionRepository
 import com.wuyi.libraryauto.ui.repository.session.SessionRepository
 import com.wuyi.libraryauto.ui.repository.task.AccountOperationCoordinator
@@ -85,26 +80,17 @@ internal class AppDependencies(
     private val seatReservationService = SeatReservationService()
     private val resolvedSeatUrlRepository: ResolvedSeatUrlRepository = PersistentResolvedSeatUrlRepository(appContext)
     private val storedSavedAccountRepository = StoredSavedAccountRepository(savedAccountStore)
-    val campusNetworkCredentialStore = CampusNetworkCredentialStore(appContext)
-    /** 复用 [CampusPortalRecoveryRunnerFactory] 持有的单例认证器，确保 UI 与后台 Worker 使用同一冷却状态。 */
-    val campusPortalAuthenticator: CampusPortalAuthenticator =
-        com.wuyi.libraryauto.runtime.CampusPortalRecoveryRunnerFactory.authenticator()
-    val campusPortalLoginPageUrlProvider: () -> String = {
-        SchoolPortalConfig.DefaultCampusPortalLoginPageUrl
-    }
-    val wifiReconnectStore = WifiReconnectStore(appContext)
     val watchdogHeartbeatStore = WatchdogHeartbeatStore(appContext)
     val watchdogStateStore = WatchdogStateStore(appContext)
-    val networkMonitorMetricsRepository =
-        NetworkMonitorMetricsRepository(
-            context = appContext,
-            wifiManager = appContext.getSystemService(Context.WIFI_SERVICE) as WifiManager,
-            connectivityManager = appContext.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager,
-            probe = OkHttpTargetReachabilityProbe.default(),
-        )
     val sessionRepository: SessionRepository = PersistentSessionRepository(appContext)
     val savedAccountRepository: SavedAccountRepository =
         storedSavedAccountRepository
+    val todayOverviewRepository =
+        TodayOverviewRepository(
+            accountSource = storedSavedAccountRepository,
+            reservationTaskDao = appDatabase.reservationTaskDao(),
+            seatDisplaySnapshotDao = appDatabase.seatDisplaySnapshotDao(),
+        )
 
     val loginGateway: LoginGateway =
         SchoolLoginGateway(
@@ -205,6 +191,17 @@ internal class AppDependencies(
             reservationTaskDao = appDatabase.reservationTaskDao(),
             seatDisplaySnapshotDao = appDatabase.seatDisplaySnapshotDao(),
             accountSeatActionExecutor = accountSeatActionRepository,
+            smartSeatRecommender =
+                SmartSeatRecommender(
+                    AccountReservationHistoryReaderImpl(
+                        planDao = appDatabase.automationPlanDao(),
+                        taskDao = appDatabase.reservationTaskDao(),
+                        snapshotDao = appDatabase.seatDisplaySnapshotDao(),
+                        storedAccountSource = storedSavedAccountRepository,
+                    ),
+                ),
+            manualReservationGateway = manualReservationRepository,
+            seatLookupRepository = seatLookupRepository,
         )
 
     val batchCheckInRunner =

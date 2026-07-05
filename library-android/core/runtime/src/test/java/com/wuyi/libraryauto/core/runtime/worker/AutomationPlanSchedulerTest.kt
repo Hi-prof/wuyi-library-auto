@@ -11,7 +11,6 @@ import com.wuyi.libraryauto.core.domain.model.CheckInWindow
 import com.wuyi.libraryauto.core.network.auth.AuthenticatedSession
 import com.wuyi.libraryauto.core.network.auth.SessionBundle
 import com.wuyi.libraryauto.core.network.seat.BookingDetail
-import com.wuyi.libraryauto.core.runtime.network.NetworkRecoveryResult
 import com.wuyi.libraryauto.core.storage.credentials.SavedAccountStore
 import com.wuyi.libraryauto.core.storage.db.AutomationPlanEntity
 import com.wuyi.libraryauto.core.storage.db.ExecutionLogEntity
@@ -119,9 +118,6 @@ class AutomationPlanSchedulerTest {
 
         val started = CountDownLatch(1)
         val allowCompletion = CountDownLatch(1)
-
-        override suspend fun ensureNetworkForBackgroundWork(): NetworkRecoveryResult =
-            NetworkRecoveryResult(recovered = true, message = "网络可用")
 
         override suspend fun findPlan(planId: String): AutomationPlanEntity =
             AutomationPlanEntity(

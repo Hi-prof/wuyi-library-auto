@@ -268,9 +268,7 @@ data class PeriodicCheckInSummary(
 enum class TriggerSource {
     GuardWorker,
     PeriodicMonitor,
-    NetworkRestored,
     ManualBatch,
     ProcessRestart,
-    CampusAuthRecovery,
     LoginSuccess,
 }

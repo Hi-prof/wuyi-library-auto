@@ -47,10 +47,8 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TimePicker
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.material3.rememberModalBottomSheetState
-import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -62,7 +60,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.wuyi.libraryauto.ui.components.StatusBadge
 import com.wuyi.libraryauto.ui.repository.task.AutomationTaskMode
+import com.wuyi.libraryauto.ui.screen.AppTimePickerSheet
 import com.wuyi.libraryauto.ui.screen.seat.buildInitialExpandedRoomIds
 import com.wuyi.libraryauto.ui.screen.seat.sortSeatNumbersForDisplay
 import com.wuyi.libraryauto.ui.viewmodel.AutomationTaskDialogState
@@ -70,7 +70,6 @@ import com.wuyi.libraryauto.ui.viewmodel.AutomationTaskSeatOptionUiModel
 import com.wuyi.libraryauto.ui.viewmodel.SavedAccountEntry
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
-import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
@@ -103,6 +102,11 @@ fun AutomationTaskDialog(
     }
     var datePickerVisible by remember { mutableStateOf(false) }
     var timePicker by remember { mutableStateOf<TimePickerTarget?>(null) }
+    val presentation =
+        buildAutomationTaskDialogPresentation(
+            dialogState = dialogState,
+            accounts = accounts,
+        )
 
     ModalBottomSheet(
         onDismissRequest = handleClose,
@@ -118,7 +122,7 @@ fun AutomationTaskDialog(
                     .padding(bottom = 24.dp),
             verticalArrangement = Arrangement.spacedBy(18.dp),
         ) {
-            DialogHeader()
+            DialogHeader(presentation)
             DialogSection(
                 title = "账号",
                 icon = Icons.Outlined.PersonOutline,
@@ -127,12 +131,7 @@ fun AutomationTaskDialog(
                     label = "任务账号",
                     selectedValue = dialogState.selectedStudentId,
                     options = buildTaskDialogAccountOptions(accounts),
-                    supportingText =
-                        if (accounts.isEmpty()) {
-                            "当前没有可用账号"
-                        } else {
-                            "切换账号后会带出该账号的默认座位与历史"
-                        },
+                    supportingText = presentation.accountSupportingText,
                     selectionKey = "account-picker",
                     onSelected = onStudentChange,
                 )
@@ -159,12 +158,13 @@ fun AutomationTaskDialog(
                 ) {
                     OutlinedButton(
                         onClick = onRefreshSeats,
+                        enabled = presentation.refreshSeatAction.enabled,
                         modifier = Modifier.weight(1f).heightIn(min = 52.dp),
                         shape = RoundedCornerShape(14.dp),
                     ) {
                         Icon(Icons.Outlined.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(6.dp))
-                        Text(if (dialogState.isRefreshingSeats) "查询中..." else "刷新座位")
+                        Text(presentation.refreshSeatAction.label)
                     }
                 }
                 OutlinedTextField(
@@ -225,7 +225,7 @@ fun AutomationTaskDialog(
                         modifier = Modifier.fillMaxWidth(),
                     ) {
                         Text(
-                            text = dialogState.previewText.ifBlank { "持续预约：跟随系统排程自动续约" },
+                            text = presentation.modeSummaryText,
                             modifier = Modifier.padding(14.dp),
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.primary,
@@ -233,6 +233,18 @@ fun AutomationTaskDialog(
                     }
                 } else {
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Surface(
+                            color = MaterialTheme.colorScheme.surfaceContainer,
+                            shape = RoundedCornerShape(14.dp),
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Text(
+                                text = presentation.modeSummaryText,
+                                modifier = Modifier.padding(14.dp),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.primary,
+                            )
+                        }
                         TaskPickerRow(
                             label = "日期",
                             value = dialogState.customDate.ifBlank { "选择日期" },
@@ -288,6 +300,7 @@ fun AutomationTaskDialog(
                 }
                 Button(
                     onClick = onSave,
+                    enabled = presentation.saveAction.enabled,
                     modifier = Modifier.weight(1f).heightIn(min = 56.dp),
                     shape = RoundedCornerShape(14.dp),
                     colors =
@@ -298,7 +311,7 @@ fun AutomationTaskDialog(
                 ) {
                     Icon(Icons.Outlined.Save, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(6.dp))
-                    Text("创建自动任务")
+                    Text(presentation.saveAction.label)
                 }
             }
         }
@@ -320,7 +333,7 @@ fun AutomationTaskDialog(
                 TimePickerTarget.Start -> dialogState.customStartTime
                 TimePickerTarget.End -> dialogState.customEndTime
             }
-        TaskTimePickerSheet(
+        AppTimePickerSheet(
             initialTime = initial,
             title = if (target == TimePickerTarget.Start) "选择开始时间" else "选择结束时间",
             onConfirm = { time ->
@@ -338,17 +351,30 @@ fun AutomationTaskDialog(
 private enum class TimePickerTarget { Start, End }
 
 @Composable
-private fun DialogHeader() {
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text(
-            text = "添加自动任务",
-            style = MaterialTheme.typography.titleLarge,
-            fontWeight = FontWeight.SemiBold,
-        )
-        Text(
-            text = "选择账号、目标座位与执行模式，保存后任务会自动执行",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+private fun DialogHeader(presentation: AutomationTaskDialogPresentation) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.Top,
+    ) {
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Text(
+                text = presentation.title,
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Text(
+                text = presentation.subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        StatusBadge(
+            text = presentation.modeBadgeLabel,
+            tone = presentation.modeBadgeTone,
         )
     }
 }
@@ -622,42 +648,6 @@ private fun TaskDatePickerSheet(
     }
 }
 
-@Composable
-private fun TaskTimePickerSheet(
-    initialTime: String,
-    title: String,
-    onConfirm: (String) -> Unit,
-    onDismiss: () -> Unit,
-) {
-    val (hour, minute) = remember(initialTime) { parseTime(initialTime) }
-    val state = rememberTimePickerState(initialHour = hour, initialMinute = minute, is24Hour = true)
-    androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
-        Surface(
-            shape = RoundedCornerShape(28.dp),
-            color = MaterialTheme.colorScheme.surface,
-            tonalElevation = 6.dp,
-        ) {
-            Column(
-                modifier = Modifier.padding(20.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
-            ) {
-                Text(text = title, style = MaterialTheme.typography.titleMedium)
-                TimePicker(state = state)
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End,
-                ) {
-                    TextButton(onClick = onDismiss) { Text("取消") }
-                    Spacer(Modifier.width(8.dp))
-                    TextButton(onClick = { onConfirm(formatTime(state.hour, state.minute)) }) {
-                        Text("确定")
-                    }
-                }
-            }
-        }
-    }
-}
-
 private fun parseDateToUtcMillis(date: String): Long? {
     if (date.isBlank()) return null
     return runCatching {
@@ -672,14 +662,3 @@ private fun formatDate(utcMillis: Long): String {
     sdf.timeZone = TimeZone.getTimeZone("UTC")
     return sdf.format(Date(utcMillis))
 }
-
-private fun parseTime(time: String): Pair<Int, Int> {
-    val now = Calendar.getInstance()
-    val parts = time.split(":")
-    val hour = parts.getOrNull(0)?.toIntOrNull() ?: now.get(Calendar.HOUR_OF_DAY)
-    val minute = parts.getOrNull(1)?.toIntOrNull() ?: 0
-    return hour.coerceIn(0, 23) to minute.coerceIn(0, 59)
-}
-
-private fun formatTime(hour: Int, minute: Int): String =
-    "%02d:%02d".format(hour, minute)

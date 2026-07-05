@@ -136,6 +136,85 @@ class SeatDisplayViewModel(
         }
     }
 
+    fun batchCheckIn() {
+        if (_uiState.value.isBatchCheckingIn) {
+            return
+        }
+        viewModelScope.launch {
+            _uiState.update {
+                it.copy(
+                    isBatchCheckingIn = true,
+                    lastBatchCheckInResult = null,
+                    batchProgressMessage = "正在为待签到账号执行签到",
+                    batchErrorMessage = "",
+                )
+            }
+            val result = runCatching { withContext(ioDispatcher) { repository.batchCheckIn() } }
+            result
+                .onSuccess { batchResult ->
+                    _uiState.update { it.copy(lastBatchCheckInResult = batchResult) }
+                    loadInitialSnapshot()
+                }
+                .onFailure { error ->
+                    _uiState.update {
+                        it.copy(batchErrorMessage = error.message?.takeIf(String::isNotBlank) ?: "一键签到失败")
+                    }
+                }
+            _uiState.update {
+                it.copy(
+                    isBatchCheckingIn = false,
+                    batchProgressMessage = "",
+                )
+            }
+        }
+    }
+
+    fun dismissBatchCheckInResult() {
+        _uiState.update { it.copy(lastBatchCheckInResult = null) }
+    }
+
+    fun batchMakeupReservation() {
+        if (_uiState.value.isBatchReserving) {
+            return
+        }
+        viewModelScope.launch {
+            _uiState.update {
+                it.copy(
+                    isBatchReserving = true,
+                    lastBatchReservationResult = null,
+                    batchProgressMessage = "正在补约今天和未来 2 天",
+                    batchErrorMessage = "",
+                )
+            }
+            val result =
+                runCatching {
+                    withContext(ioDispatcher) {
+                        repository.batchMakeupReservation()
+                    }
+                }
+            result
+                .onSuccess { batchResult ->
+                    _uiState.update { it.copy(lastBatchReservationResult = batchResult) }
+                    loadInitialSnapshot()
+                }
+                .onFailure { error ->
+                    _uiState.update {
+                        it.copy(batchErrorMessage = error.message?.takeIf(String::isNotBlank) ?: "一键补约失败")
+                    }
+                }
+            _uiState.update {
+                it.copy(
+                    isBatchReserving = false,
+                    batchProgressMessage = "",
+                )
+            }
+        }
+    }
+
+    fun dismissBatchReservationResult() {
+        _uiState.update { it.copy(lastBatchReservationResult = null) }
+    }
+
     private fun replaceCard(card: SeatDisplayCardUiState) {
         _uiState.update { state ->
             state.copy(

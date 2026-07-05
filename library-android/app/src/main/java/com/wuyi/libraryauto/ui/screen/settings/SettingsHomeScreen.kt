@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -32,7 +33,7 @@ fun SettingsHomeScreen(
             settingsDestinations.filter { it.group == group }
         }
     LazyColumn(
-        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 14.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         item {
@@ -44,8 +45,8 @@ fun SettingsHomeScreen(
                 item { SettingsGroupHeader(title = group.title) }
                 item {
                     Surface(
-                        shape = RoundedCornerShape(20.dp),
-                        color = MaterialTheme.colorScheme.surface,
+                        shape = RoundedCornerShape(24.dp),
+                        color = MaterialTheme.colorScheme.surfaceContainerLow,
                         tonalElevation = 1.dp,
                         modifier = Modifier.fillMaxWidth(),
                     ) {
@@ -70,25 +71,42 @@ fun SettingsHomeScreen(
 @Composable
 private fun SettingsIntroCard() {
     Surface(
-        shape = RoundedCornerShape(20.dp),
-        color = MaterialTheme.colorScheme.primaryContainer,
+        shape = RoundedCornerShape(24.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
         modifier = Modifier.fillMaxWidth(),
     ) {
-        Column(
-            modifier = Modifier.padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+        Row(
+            modifier = Modifier.padding(horizontal = 18.dp, vertical = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(
-                text = "设置",
-                style = MaterialTheme.typography.titleLarge,
-                color = MaterialTheme.colorScheme.onPrimaryContainer,
-                fontWeight = FontWeight.SemiBold,
-            )
-            Text(
-                text = "按运行 / 网络 / 诊断分组，便于查找和扩展。",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.85f),
-            )
+            Surface(
+                color = MaterialTheme.colorScheme.primary,
+                shape = RoundedCornerShape(16.dp),
+                modifier = Modifier.size(48.dp),
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Text(
+                        text = "设",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onPrimary,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                }
+            }
+            Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                Text(
+                    text = "设置中心",
+                    style = MaterialTheme.typography.titleLarge,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Text(
+                    text = "权限 · 同步 · 监控 · 诊断",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
     }
 }
@@ -114,20 +132,21 @@ private fun SettingsRow(
             Modifier
                 .fillMaxWidth()
                 .clickable(onClick = onClick)
+                .heightIn(min = 72.dp)
                 .padding(horizontal = 18.dp, vertical = 14.dp),
         horizontalArrangement = Arrangement.spacedBy(14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Surface(
-            color = MaterialTheme.colorScheme.primaryContainer,
-            shape = RoundedCornerShape(12.dp),
+            color = MaterialTheme.colorScheme.surfaceContainerHighest,
+            shape = RoundedCornerShape(14.dp),
             modifier = Modifier.size(40.dp),
         ) {
             Box(contentAlignment = Alignment.Center) {
                 Icon(
                     imageVector = destination.icon,
                     contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                    tint = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.size(20.dp),
                 )
             }

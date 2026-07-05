@@ -7,16 +7,19 @@ import com.wuyi.libraryauto.ui.repository.task.AutomationTaskMode
 fun filterAutomationPlans(
     plans: List<AutomationPlanRecord>,
     studentFilter: String,
+    reservationChecks: Map<String, AutomationTaskReservationCheckUiState> = emptyMap(),
 ): List<AutomationTaskPlanUiModel> {
     val safeFilter = studentFilter.trim()
     return plans
         .asSequence()
         .filter { plan -> safeFilter.isBlank() || plan.studentId == safeFilter }
-        .map(AutomationPlanRecord::toAutomationTaskPlanUiModel)
+        .map { plan -> plan.toAutomationTaskPlanUiModel(reservationChecks[plan.planId]) }
         .toList()
 }
 
-fun AutomationPlanRecord.toAutomationTaskPlanUiModel(): AutomationTaskPlanUiModel =
+fun AutomationPlanRecord.toAutomationTaskPlanUiModel(
+    reservationCheck: AutomationTaskReservationCheckUiState? = null,
+): AutomationTaskPlanUiModel =
     AutomationTaskPlanUiModel(
         planId = planId,
         studentId = studentId,
@@ -30,8 +33,9 @@ fun AutomationPlanRecord.toAutomationTaskPlanUiModel(): AutomationTaskPlanUiMode
                 "持续预约 + 自动签到"
             } else {
                 "单次时间段"
-            },
+        },
         enabled = enabled,
+        reservationCheck = reservationCheck ?: AutomationTaskReservationCheckUiState(),
     )
 
 fun SeatRoomSnapshot.toAutomationTaskSeatOptionUiModel(): AutomationTaskSeatOptionUiModel =

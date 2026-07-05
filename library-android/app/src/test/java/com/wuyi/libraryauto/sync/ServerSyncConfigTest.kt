@@ -21,7 +21,7 @@ import org.robolectric.annotation.Config
  * - 字段读写往返一致
  *
  * 与 [AccountPoolSyncRepositoryTest] 同样使用 `@Config(application = Application::class)`
- * 跑朴素 Application，绕过 `@HiltAndroidApp` 默认对 WorkManager / CaptivePortalRecovery 等
+ * 跑朴素 Application，绕过 `@HiltAndroidApp` 默认对 WorkManager 等
  * 生产依赖的初始化要求。
  */
 @RunWith(RobolectricTestRunner::class)

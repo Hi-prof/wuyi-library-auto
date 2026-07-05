@@ -1,6 +1,5 @@
 package com.wuyi.libraryauto.ui.screen.login
 
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -10,12 +9,12 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
@@ -44,18 +43,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.CornerRadius
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.wuyi.libraryauto.ui.components.StatusBadge
 import com.wuyi.libraryauto.ui.viewmodel.LoginGateway
 import com.wuyi.libraryauto.ui.viewmodel.LoginViewModel
 import com.wuyi.libraryauto.ui.viewmodel.LoginViewModelFactory
@@ -79,6 +73,15 @@ fun LoginScreen(
 ) {
     val viewModel: LoginViewModel = viewModel(factory = LoginViewModelFactory(loginGateway))
     val uiState = viewModel.uiState
+    val presentation =
+        buildLoginPresentation(
+            uiState = uiState,
+            title = title,
+            description = description,
+            hint = hint,
+            primaryButtonLabel = primaryButtonLabel,
+            secondaryButtonLabel = secondaryButtonLabel,
+        )
     var studentId by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
 
@@ -90,19 +93,21 @@ fun LoginScreen(
 
     Box(
         modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
+        contentAlignment = Alignment.TopCenter,
     ) {
         Column(
             modifier =
                 Modifier
-                    .fillMaxSize()
+                    .fillMaxWidth()
+                    .widthIn(max = 560.dp)
                     .verticalScroll(rememberScrollState())
                     .imePadding()
                     .padding(horizontal = 20.dp, vertical = 24.dp),
             verticalArrangement = Arrangement.spacedBy(20.dp),
         ) {
-            LoginHero(title = title, description = description, hint = hint)
+            LoginHeader(presentation = presentation)
             Surface(
-                color = MaterialTheme.colorScheme.surface,
+                color = MaterialTheme.colorScheme.surfaceContainerLow,
                 shape = RoundedCornerShape(28.dp),
                 tonalElevation = 1.dp,
                 modifier = Modifier.fillMaxWidth(),
@@ -154,7 +159,7 @@ fun LoginScreen(
                         shape = RoundedCornerShape(16.dp),
                         visualTransformation = PasswordVisualTransformation(),
                         supportingText = {
-                            Text("可留空，默认会使用学号", style = MaterialTheme.typography.labelSmall)
+                            Text(presentation.passwordSupportText, style = MaterialTheme.typography.labelSmall)
                         },
                         keyboardOptions =
                             KeyboardOptions(
@@ -167,13 +172,13 @@ fun LoginScreen(
                             ),
                         colors = loginInputColors(),
                     )
-                    if (uiState.errorMessage != null) {
-                        ErrorBanner(message = uiState.errorMessage)
+                    if (presentation.errorMessage != null) {
+                        ErrorBanner(message = presentation.errorMessage)
                     }
                     Button(
                         onClick = { viewModel.login(studentId, password) },
                         modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp),
-                        enabled = !uiState.isLoading,
+                        enabled = presentation.primaryButtonEnabled,
                         shape = RoundedCornerShape(16.dp),
                         contentPadding = PaddingValues(vertical = 14.dp),
                         colors =
@@ -188,7 +193,7 @@ fun LoginScreen(
                             modifier = Modifier.size(18.dp),
                         )
                         Spacer(Modifier.width(8.dp))
-                        Text(if (uiState.isLoading) "登录中..." else primaryButtonLabel)
+                        Text(presentation.primaryButtonLabel)
                     }
                     TextButton(
                         onClick = onOpenPermissionHelp,
@@ -200,7 +205,7 @@ fun LoginScreen(
                             modifier = Modifier.size(16.dp),
                         )
                         Spacer(Modifier.width(6.dp))
-                        Text(secondaryButtonLabel)
+                        Text(presentation.secondaryButtonLabel)
                     }
                 }
             }
@@ -218,98 +223,35 @@ private fun loginInputColors() =
     )
 
 @Composable
-private fun LoginHero(
-    title: String,
-    description: String,
-    hint: String,
-) {
+private fun LoginHeader(presentation: LoginPresentation) {
     Surface(
         shape = RoundedCornerShape(28.dp),
-        color = MaterialTheme.colorScheme.primaryContainer,
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        tonalElevation = 1.dp,
         modifier = Modifier.fillMaxWidth(),
     ) {
-        Box {
-            HeroIllustration(
-                modifier =
-                    Modifier
-                        .fillMaxWidth()
-                        .height(160.dp),
+        Column(
+            modifier = Modifier.padding(horizontal = 24.dp, vertical = 22.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            StatusBadge(
+                text = presentation.statusLabel,
+                tone = presentation.statusTone,
             )
-            Column(
-                modifier = Modifier.padding(horizontal = 24.dp, vertical = 28.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.headlineMedium,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer,
-                    fontWeight = FontWeight.SemiBold,
-                )
-                Text(
-                    text = description,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.85f),
-                )
-                Text(
-                    text = hint,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f),
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun HeroIllustration(modifier: Modifier = Modifier) {
-    val primary = MaterialTheme.colorScheme.primary
-    val container = MaterialTheme.colorScheme.surface
-    val accent = MaterialTheme.colorScheme.tertiary
-    Canvas(modifier = modifier) {
-        val w = size.width
-        val h = size.height
-        // 右上角圆环装饰
-        drawCircle(
-            brush = Brush.radialGradient(listOf(primary.copy(alpha = 0.18f), Color.Transparent)),
-            radius = w * 0.4f,
-            center = Offset(w * 0.85f, h * 0.0f),
-        )
-        // 右侧白色"卡片"+小圆点
-        drawRoundRect(
-            color = container.copy(alpha = 0.9f),
-            topLeft = Offset(w * 0.62f, h * 0.32f),
-            size = Size(w * 0.3f, h * 0.5f),
-            cornerRadius = CornerRadius(20f, 20f),
-        )
-        drawCircle(color = primary, radius = h * 0.04f, center = Offset(w * 0.7f, h * 0.45f))
-        drawRoundRect(
-            color = primary.copy(alpha = 0.6f),
-            topLeft = Offset(w * 0.66f, h * 0.55f),
-            size = Size(w * 0.22f, h * 0.05f),
-            cornerRadius = CornerRadius(4f, 4f),
-        )
-        drawRoundRect(
-            color = primary.copy(alpha = 0.4f),
-            topLeft = Offset(w * 0.66f, h * 0.65f),
-            size = Size(w * 0.18f, h * 0.05f),
-            cornerRadius = CornerRadius(4f, 4f),
-        )
-        // 锁形状（简笔）
-        drawRoundRect(
-            color = primary,
-            topLeft = Offset(w * 0.78f, h * 0.18f),
-            size = Size(w * 0.06f, h * 0.13f),
-            cornerRadius = CornerRadius(8f, 8f),
-            style = Stroke(width = 3f),
-        )
-        // 闪光线
-        listOf(0f, 1f, 2f).forEach { i ->
-            val y = h * (0.15f + i * 0.06f)
-            drawLine(
-                color = accent.copy(alpha = 0.5f),
-                start = Offset(w * 0.5f, y),
-                end = Offset(w * 0.58f, y),
-                strokeWidth = 2f,
+            Text(
+                text = presentation.title,
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Text(
+                text = presentation.description,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                text = presentation.hint,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
     }

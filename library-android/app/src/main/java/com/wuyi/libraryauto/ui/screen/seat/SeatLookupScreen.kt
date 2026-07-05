@@ -45,9 +45,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TimePicker
 import androidx.compose.material3.rememberDatePickerState
-import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
@@ -69,6 +67,7 @@ import com.wuyi.libraryauto.ui.components.StatusTone
 import com.wuyi.libraryauto.ui.repository.seat.ManualReservationGateway
 import com.wuyi.libraryauto.ui.repository.seat.SeatLookupRepository
 import com.wuyi.libraryauto.ui.repository.session.SessionRepository
+import com.wuyi.libraryauto.ui.screen.AppTimePickerSheet
 import com.wuyi.libraryauto.ui.viewmodel.ManualReservationRoomUiModel
 import com.wuyi.libraryauto.ui.viewmodel.ManualReservationUiState
 import com.wuyi.libraryauto.ui.viewmodel.ManualReservationViewModel
@@ -76,7 +75,6 @@ import com.wuyi.libraryauto.ui.viewmodel.ManualReservationViewModelFactory
 import com.wuyi.libraryauto.ui.viewmodel.SavedAccountEntry
 import com.wuyi.libraryauto.ui.viewmodel.SavedAccountRepository
 import java.text.SimpleDateFormat
-import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
@@ -110,6 +108,7 @@ fun SeatLookupScreen(
     }
     var datePickerVisible by remember { mutableStateOf(false) }
     var timePickerVisible by remember { mutableStateOf(false) }
+    val presentation = buildManualReservationFlowPresentation(uiState)
 
     DisposableEffect(lifecycleOwner) {
         val observer =
@@ -125,6 +124,9 @@ fun SeatLookupScreen(
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         item {
+            ManualFlowHeader(presentation)
+        }
+        item {
             StepCard(
                 stepNumber = 1,
                 title = "选择账号",
@@ -136,7 +138,7 @@ fun SeatLookupScreen(
                         modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
                         shape = RoundedCornerShape(14.dp),
                     ) {
-                        Text("先去添加账号")
+                        Text(presentation.addAccountAction.label)
                     }
                 } else {
                     AccountDropdown(
@@ -185,20 +187,21 @@ fun SeatLookupScreen(
                 ) {
                     Button(
                         onClick = viewModel::querySeats,
-                        enabled = !uiState.isLoadingSeats && uiState.accounts.isNotEmpty(),
+                        enabled = presentation.queryAction.enabled,
                         modifier = Modifier.weight(1f).heightIn(min = 52.dp),
                         shape = RoundedCornerShape(14.dp),
                     ) {
                         Icon(Icons.Outlined.Search, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(6.dp))
-                        Text(if (uiState.isLoadingSeats) "查询中..." else "查询可选座位")
+                        Text(presentation.queryAction.label)
                     }
                     OutlinedButton(
                         onClick = onOpenAccounts,
+                        enabled = presentation.accountListAction.enabled,
                         modifier = Modifier.weight(1f).heightIn(min = 52.dp),
                         shape = RoundedCornerShape(14.dp),
                     ) {
-                        Text("账号列表")
+                        Text(presentation.accountListAction.label)
                     }
                 }
             }
@@ -210,6 +213,7 @@ fun SeatLookupScreen(
             item {
                 ManualSummaryCard(
                     uiState = uiState,
+                    presentation = presentation,
                     onReserve = viewModel::reserveSelectedSeat,
                 )
             }
@@ -245,14 +249,65 @@ fun SeatLookupScreen(
         )
     }
     if (timePickerVisible) {
-        TimePickerSheet(
+        AppTimePickerSheet(
             initialTime = uiState.selectedStartTime,
+            title = "选择开始时间",
             onConfirm = { time ->
                 viewModel.updateSelectedStartTime(time)
                 timePickerVisible = false
             },
             onDismiss = { timePickerVisible = false },
         )
+    }
+}
+
+@Composable
+private fun ManualFlowHeader(presentation: ManualReservationFlowPresentation) {
+    Surface(
+        shape = RoundedCornerShape(24.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 18.dp, vertical = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Surface(
+                color = MaterialTheme.colorScheme.primaryContainer,
+                shape = RoundedCornerShape(16.dp),
+                modifier = Modifier.size(48.dp),
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = Icons.Outlined.EventAvailable,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                        modifier = Modifier.size(24.dp),
+                    )
+                }
+            }
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Text(
+                    text = presentation.title,
+                    style = MaterialTheme.typography.titleLarge,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Text(
+                    text = presentation.subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            StatusBadge(
+                text = presentation.statusBadgeLabel,
+                tone = presentation.statusBadgeTone,
+            )
+        }
     }
 }
 
@@ -482,9 +537,9 @@ private fun ManualStatusBanner(message: String) {
 @Composable
 private fun ManualSummaryCard(
     uiState: ManualReservationUiState,
+    presentation: ManualReservationFlowPresentation,
     onReserve: () -> Unit,
 ) {
-    val seatPicked = uiState.selectedSeatNumber.isNotBlank()
     Surface(
         shape = RoundedCornerShape(20.dp),
         color = MaterialTheme.colorScheme.primaryContainer,
@@ -500,18 +555,13 @@ private fun ManualSummaryCard(
                 padding = PaddingValues(0.dp),
             )
             Text(
-                text =
-                    if (seatPicked) {
-                        "已选座位：${uiState.selectedRoomName} · ${uiState.selectedSeatNumber}"
-                    } else {
-                        "还没选中座位，请在下方自习室列表点选"
-                    },
+                text = presentation.selectedSeatText,
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onPrimaryContainer,
             )
             Button(
                 onClick = onReserve,
-                enabled = seatPicked && !uiState.isSubmitting,
+                enabled = presentation.reserveAction.enabled,
                 modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp),
                 shape = RoundedCornerShape(14.dp),
                 colors =
@@ -520,7 +570,7 @@ private fun ManualSummaryCard(
                         contentColor = MaterialTheme.colorScheme.onPrimary,
                     ),
             ) {
-                Text(if (uiState.isSubmitting) "预约中..." else "立即预约")
+                Text(presentation.reserveAction.label)
             }
         }
     }
@@ -535,10 +585,16 @@ private fun ManualRoomCard(
     onToggleExpanded: () -> Unit,
     onSelectSeat: (String, String, String) -> Unit,
 ) {
-    val sortedSeatNumbers = remember(room.seatNumbers) { sortSeatNumbersForDisplay(room.seatNumbers) }
+    val presentation =
+        buildManualRoomPresentation(
+            room = room,
+            expanded = expanded,
+            selectedRoomId = selectedRoomId,
+            selectedSeatNumber = selectedSeatNumber,
+        )
     Surface(
         shape = RoundedCornerShape(20.dp),
-        color = MaterialTheme.colorScheme.surface,
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
         tonalElevation = 1.dp,
         modifier = Modifier.fillMaxWidth(),
     ) {
@@ -549,17 +605,21 @@ private fun ManualRoomCard(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(text = room.roomName, style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        text = presentation.roomName,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                    )
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        StatusBadge(text = room.storey, tone = StatusTone.Neutral)
+                        StatusBadge(text = presentation.storeyLabel, tone = StatusTone.Neutral)
                         StatusBadge(
-                            text = "可用 ${room.availableCount}",
-                            tone = if (room.availableCount > 0) StatusTone.Positive else StatusTone.Warning,
+                            text = presentation.availabilityLabel,
+                            tone = presentation.availabilityTone,
                         )
                     }
                 }
                 Text(
-                    text = if (expanded) "收起" else "展开",
+                    text = presentation.expandActionLabel,
                     style = MaterialTheme.typography.labelLarge,
                     color = MaterialTheme.colorScheme.primary,
                 )
@@ -569,16 +629,15 @@ private fun ManualRoomCard(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    sortedSeatNumbers.forEach { seatNumber ->
+                    presentation.sortedSeatNumbers.forEach { seatNumber ->
                         val isSelected =
-                            selectedRoomId == room.roomId && selectedSeatNumber == seatNumber
-                        val isRecommended = room.recommendedSeatNumber == seatNumber
+                            selectedRoomId.trim() == presentation.roomId && selectedSeatNumber.trim() == seatNumber
                         FilterChip(
                             selected = isSelected,
-                            onClick = { onSelectSeat(room.roomId, room.roomName, seatNumber) },
+                            onClick = { onSelectSeat(presentation.roomId, presentation.roomName, seatNumber) },
                             label = {
                                 Text(
-                                    text = if (isRecommended) "$seatNumber · 推荐" else seatNumber,
+                                    text = manualSeatChipLabel(seatNumber, room.recommendedSeatNumber),
                                 )
                             },
                             shape = RoundedCornerShape(50),
@@ -588,7 +647,7 @@ private fun ManualRoomCard(
                 }
             } else {
                 Text(
-                    text = "点按展开座位列表",
+                    text = presentation.collapsedHint,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -622,41 +681,6 @@ private fun DatePickerSheet(
     }
 }
 
-@Composable
-private fun TimePickerSheet(
-    initialTime: String,
-    onConfirm: (String) -> Unit,
-    onDismiss: () -> Unit,
-) {
-    val (hour, minute) = remember(initialTime) { parseTime(initialTime) }
-    val state = rememberTimePickerState(initialHour = hour, initialMinute = minute, is24Hour = true)
-    androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
-        Surface(
-            shape = RoundedCornerShape(28.dp),
-            color = MaterialTheme.colorScheme.surface,
-            tonalElevation = 6.dp,
-        ) {
-            Column(
-                modifier = Modifier.padding(20.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
-            ) {
-                Text(text = "选择开始时间", style = MaterialTheme.typography.titleMedium)
-                TimePicker(state = state)
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End,
-                ) {
-                    TextButton(onClick = onDismiss) { Text("取消") }
-                    Spacer(Modifier.width(8.dp))
-                    TextButton(onClick = { onConfirm(formatTime(state.hour, state.minute)) }) {
-                        Text("确定")
-                    }
-                }
-            }
-        }
-    }
-}
-
 private fun parseDateToUtcMillis(date: String): Long? {
     if (date.isBlank()) return null
     return runCatching {
@@ -671,14 +695,3 @@ private fun formatDate(utcMillis: Long): String {
     sdf.timeZone = TimeZone.getTimeZone("UTC")
     return sdf.format(Date(utcMillis))
 }
-
-private fun parseTime(time: String): Pair<Int, Int> {
-    val now = Calendar.getInstance()
-    val parts = time.split(":")
-    val hour = parts.getOrNull(0)?.toIntOrNull() ?: now.get(Calendar.HOUR_OF_DAY)
-    val minute = parts.getOrNull(1)?.toIntOrNull() ?: 0
-    return hour.coerceIn(0, 23) to minute.coerceIn(0, 59)
-}
-
-private fun formatTime(hour: Int, minute: Int): String =
-    "%02d:%02d".format(hour, minute)
