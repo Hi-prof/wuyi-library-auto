@@ -13,7 +13,7 @@ data class CheckInWindow(
         nowEpochSeconds >= openFromEpochSeconds() && nowEpochSeconds < closeAtEpochSeconds()
 
     companion object {
-        const val FALLBACK_SECONDS = 900L
+        const val FALLBACK_SECONDS = 1_800L
         const val MAX_WINDOW_SECONDS = 86_400L
 
         /**

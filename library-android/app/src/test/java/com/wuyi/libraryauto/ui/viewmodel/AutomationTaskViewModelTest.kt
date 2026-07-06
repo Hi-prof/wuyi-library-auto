@@ -19,14 +19,19 @@ import com.wuyi.libraryauto.ui.repository.settings.SeatActionAuditRepository
 import com.wuyi.libraryauto.ui.repository.settings.SeatLookupAuditRepository
 import com.wuyi.libraryauto.ui.repository.settings.SeatStatusAuditRepository
 import com.wuyi.libraryauto.ui.repository.task.AccountReservationHistoryReader
+import com.wuyi.libraryauto.ui.repository.task.AccountSeatAction
+import com.wuyi.libraryauto.ui.repository.task.AccountSeatActionExecutionResult
+import com.wuyi.libraryauto.ui.repository.task.AccountSeatActionExecutor
 import com.wuyi.libraryauto.ui.repository.task.AutomationPlanDraft
 import com.wuyi.libraryauto.ui.repository.task.AutomationPlanRecord
 import com.wuyi.libraryauto.ui.repository.task.AutomationPlanRepository
 import com.wuyi.libraryauto.ui.repository.task.AutomationTaskMode
 import com.wuyi.libraryauto.ui.repository.task.ReservationHistoryHit
+import com.wuyi.libraryauto.ui.repository.task.SeatBookingSnapshotView
 import java.time.Clock
 import java.time.Instant
 import java.time.ZoneId
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -282,6 +287,300 @@ class AutomationTaskViewModelTest {
     }
 
     @Test
+    fun `checkReservationsForPlans marks matched and empty account bookings`() = runTest {
+        val repository =
+            FakeAutomationPlanRepository(
+                plans =
+                    listOf(
+                        AutomationPlanRecord(
+                            planId = "plan-1",
+                            studentId = "20230001",
+                            roomName = "自习室圆形二楼",
+                            seatNumber = "166",
+                            mode = AutomationTaskMode.CONTINUOUS,
+                            enabled = true,
+                            previewText = "2026-04-11 9:00-22:00",
+                            lastResultMessage = "",
+                        ),
+                        AutomationPlanRecord(
+                            planId = "plan-2",
+                            studentId = "20230002",
+                            roomName = "综合阅览室",
+                            seatNumber = "021",
+                            mode = AutomationTaskMode.CONTINUOUS,
+                            enabled = true,
+                            previewText = "2026-04-11 9:00-22:00",
+                            lastResultMessage = "",
+                        ),
+                    ),
+            )
+        val viewModel =
+            buildViewModel(
+                automationPlanRepository = repository,
+                accountSeatActionExecutor =
+                    FakeAccountSeatActionExecutor(
+                        activeBookings =
+                            mapOf(
+                                "20230001" to
+                                    listOf(
+                                        SeatBookingSnapshotView(
+                                            roomName = "自习室圆形二楼",
+                                            seatNumber = "166",
+                                            beginLabel = "2026-04-11 9:00",
+                                            statusLabel = "待签到",
+                                        ),
+                                    ),
+                                "20230002" to emptyList(),
+                            ),
+                    ),
+            )
+        advanceUntilIdle()
+
+        viewModel.checkReservationsForPlans()
+        advanceUntilIdle()
+
+        val checks = viewModel.uiState.plans.associate { plan -> plan.planId to plan.reservationCheck }
+        assertThat(checks["plan-1"]?.status).isEqualTo(AutomationTaskReservationCheckStatus.MATCHED)
+        assertThat(checks["plan-1"]?.label).isEqualTo("目标已预约")
+        assertThat(checks["plan-2"]?.status).isEqualTo(AutomationTaskReservationCheckStatus.EMPTY)
+        assertThat(viewModel.uiState.statusMessage).contains("目标已预约 1 个")
+        assertThat(viewModel.uiState.statusMessage).contains("暂无预约 1 个")
+    }
+
+    @Test
+    fun `openCreateFromBookingsDialog orders accounts without plans first and selects them by default`() = runTest {
+        val repository =
+            FakeAutomationPlanRepository(
+                plans =
+                    listOf(
+                        AutomationPlanRecord(
+                            planId = "plan-1",
+                            studentId = "20230001",
+                            roomName = "旧自习室",
+                            seatNumber = "001",
+                            mode = AutomationTaskMode.CONTINUOUS,
+                            enabled = true,
+                            previewText = "旧计划",
+                            lastResultMessage = "",
+                        ),
+                    ),
+            )
+        val viewModel =
+            buildViewModel(
+                automationPlanRepository = repository,
+                accountSeatActionExecutor =
+                    FakeAccountSeatActionExecutor(
+                        activeBookings =
+                            mapOf(
+                                "20230001" to
+                                    listOf(
+                                        SeatBookingSnapshotView(
+                                            roomName = "二楼自习室",
+                                            seatNumber = "166",
+                                            beginLabel = "2026-04-11 09:00",
+                                            statusLabel = "待签到",
+                                        ),
+                                    ),
+                                "20230002" to
+                                    listOf(
+                                        SeatBookingSnapshotView(
+                                            roomName = "综合阅览室",
+                                            seatNumber = "021",
+                                            beginLabel = "2026-04-11 10:00",
+                                            statusLabel = "待签到",
+                                        ),
+                                    ),
+                            ),
+                    ),
+            )
+        advanceUntilIdle()
+
+        viewModel.openCreateFromBookingsDialog()
+        advanceUntilIdle()
+
+        val dialog = viewModel.uiState.createFromBookingsDialog
+        assertThat(dialog.visible).isTrue()
+        assertThat(dialog.rows.map { it.studentId }).containsExactly("20230002", "20230001").inOrder()
+        assertThat(dialog.rows.map { it.hasExistingPlan }).containsExactly(false, true).inOrder()
+        assertThat(dialog.rows.filter { it.selected }.map { it.studentId }).containsExactly("20230002")
+        assertThat(dialog.rows.all { it.canCreate }).isTrue()
+    }
+
+    @Test
+    fun `openCreateFromBookingsDialog treats disabled plans as existing tasks`() = runTest {
+        val repository =
+            FakeAutomationPlanRepository(
+                plans =
+                    listOf(
+                        AutomationPlanRecord(
+                            planId = "plan-disabled",
+                            studentId = "20230001",
+                            roomName = "旧自习室",
+                            seatNumber = "001",
+                            mode = AutomationTaskMode.CONTINUOUS,
+                            enabled = false,
+                            previewText = "旧计划",
+                            lastResultMessage = "",
+                        ),
+                    ),
+            )
+        val viewModel =
+            buildViewModel(
+                automationPlanRepository = repository,
+                accountSeatActionExecutor =
+                    FakeAccountSeatActionExecutor(
+                        activeBookings =
+                            mapOf(
+                                "20230001" to
+                                    listOf(
+                                        SeatBookingSnapshotView(
+                                            roomName = "二楼自习室",
+                                            seatNumber = "166",
+                                            beginLabel = "2026-04-11 09:00",
+                                            statusLabel = "待签到",
+                                        ),
+                                    ),
+                                "20230002" to
+                                    listOf(
+                                        SeatBookingSnapshotView(
+                                            roomName = "综合阅览室",
+                                            seatNumber = "021",
+                                            beginLabel = "2026-04-11 10:00",
+                                            statusLabel = "待签到",
+                                        ),
+                                    ),
+                            ),
+                    ),
+            )
+        advanceUntilIdle()
+
+        viewModel.openCreateFromBookingsDialog()
+        advanceUntilIdle()
+
+        val dialog = viewModel.uiState.createFromBookingsDialog
+        assertThat(dialog.rows.map { it.studentId }).containsExactly("20230002", "20230001").inOrder()
+        assertThat(dialog.rows.map { it.hasExistingPlan }).containsExactly(false, true).inOrder()
+        assertThat(dialog.rows.filter { it.selected }.map { it.studentId }).containsExactly("20230002")
+    }
+
+    @Test
+    fun `selectAllCreateFromBookingsRows and confirmCreateFromBookings create tasks for selected bookings`() = runTest {
+        val repository =
+            FakeAutomationPlanRepository(
+                plans =
+                    listOf(
+                        AutomationPlanRecord(
+                            planId = "plan-1",
+                            studentId = "20230001",
+                            roomName = "旧自习室",
+                            seatNumber = "001",
+                            mode = AutomationTaskMode.CONTINUOUS,
+                            enabled = true,
+                            previewText = "旧计划",
+                            lastResultMessage = "",
+                        ),
+                    ),
+            )
+        val viewModel =
+            buildViewModel(
+                automationPlanRepository = repository,
+                accountSeatActionExecutor =
+                    FakeAccountSeatActionExecutor(
+                        activeBookings =
+                            mapOf(
+                                "20230001" to
+                                    listOf(
+                                        SeatBookingSnapshotView(
+                                            roomName = "二楼自习室",
+                                            seatNumber = "166",
+                                            beginLabel = "2026-04-11 09:00",
+                                            statusLabel = "待签到",
+                                        ),
+                                    ),
+                                "20230002" to
+                                    listOf(
+                                        SeatBookingSnapshotView(
+                                            roomName = "综合阅览室",
+                                            seatNumber = "021",
+                                            beginLabel = "2026-04-11 10:00",
+                                            statusLabel = "待签到",
+                                        ),
+                                    ),
+                            ),
+                    ),
+            )
+        advanceUntilIdle()
+        viewModel.openCreateFromBookingsDialog()
+        advanceUntilIdle()
+
+        viewModel.selectAllCreateFromBookingsRows()
+        viewModel.confirmCreateFromBookings()
+        advanceUntilIdle()
+
+        assertThat(repository.savedDrafts.map { it.studentId }).containsExactly("20230002", "20230001").inOrder()
+        assertThat(repository.savedDrafts[0]).isEqualTo(
+            AutomationPlanDraft(
+                studentId = "20230002",
+                roomName = "综合阅览室",
+                seatNumber = "021",
+                mode = AutomationTaskMode.CONTINUOUS,
+            ),
+        )
+        assertThat(repository.savedDrafts[1]).isEqualTo(
+            AutomationPlanDraft(
+                studentId = "20230001",
+                roomName = "二楼自习室",
+                seatNumber = "166",
+                mode = AutomationTaskMode.CONTINUOUS,
+            ),
+        )
+        assertThat(viewModel.uiState.createFromBookingsDialog.visible).isFalse()
+        assertThat(viewModel.uiState.statusMessage).contains("创建自动任务完成：成功 2 个")
+    }
+
+    @Test
+    fun `openCreateFromBookingsDialog reports missing booking executor`() = runTest {
+        val viewModel = buildViewModel(accountSeatActionExecutor = null)
+
+        viewModel.openCreateFromBookingsDialog()
+        advanceUntilIdle()
+
+        assertThat(viewModel.uiState.createFromBookingsDialog.visible).isFalse()
+        assertThat(viewModel.uiState.statusMessage).isEqualTo("当前版本未配置预约读取入口，无法根据当前预约创建自动任务")
+    }
+
+    @Test
+    fun `closeCreateFromBookingsDialog keeps stale booking load result from reopening sheet`() = runTest {
+        val allowLoad = CompletableDeferred<Unit>()
+        val viewModel =
+            buildViewModel(
+                accountSeatActionExecutor =
+                    FakeAccountSeatActionExecutor(
+                        activeBookings =
+                            mapOf(
+                                "20230001" to
+                                    listOf(
+                                        SeatBookingSnapshotView(
+                                            roomName = "二楼自习室",
+                                            seatNumber = "166",
+                                        ),
+                                    ),
+                            ),
+                        beforeLoadActiveBookings = { allowLoad.await() },
+                    ),
+            )
+        advanceUntilIdle()
+
+        viewModel.openCreateFromBookingsDialog()
+        viewModel.closeCreateFromBookingsDialog()
+        allowLoad.complete(Unit)
+        advanceUntilIdle()
+
+        assertThat(viewModel.uiState.createFromBookingsDialog.visible).isFalse()
+        assertThat(viewModel.uiState.createFromBookingsDialog.rows).isEmpty()
+    }
+
+    @Test
     fun `savePlan persists selected dialog values and closes dialog`() = runTest {
         val repository = FakeAutomationPlanRepository()
         val viewModel = buildViewModel(automationPlanRepository = repository)
@@ -383,6 +682,7 @@ class AutomationTaskViewModelTest {
         seatLookupRepository: FakeSeatLookupRepository = FakeSeatLookupRepository(),
         initialStudentFilter: String = "",
         clock: Clock = Clock.fixed(Instant.parse("2026-04-11T01:30:00Z"), ZoneId.of("Asia/Shanghai")),
+        accountSeatActionExecutor: AccountSeatActionExecutor? = null,
     ): AutomationTaskViewModel =
         AutomationTaskViewModel(
             accountRepository =
@@ -413,6 +713,7 @@ class AutomationTaskViewModelTest {
             initialStudentFilter = initialStudentFilter,
             historyReader = FakeAccountReservationHistoryReader(),
             diagnosticsLogRepository = buildDiagnosticsLogRepository(),
+            accountSeatActionExecutor = accountSeatActionExecutor,
         )
 
     private fun buildDiagnosticsLogRepository(): DiagnosticsLogRepository =
@@ -516,14 +817,16 @@ class AutomationTaskViewModelTest {
     ) : AutomationPlanRepository {
         private val state = MutableStateFlow(plans)
         var lastSavedDraft: AutomationPlanDraft? = null
+        val savedDrafts = mutableListOf<AutomationPlanDraft>()
 
         override fun observePlans(): Flow<List<AutomationPlanRecord>> = state
 
         override suspend fun savePlan(draft: AutomationPlanDraft): AutomationPlanRecord {
             lastSavedDraft = draft
+            savedDrafts += draft
             val saved =
                 AutomationPlanRecord(
-                    planId = "plan-new",
+                    planId = draft.planId.ifBlank { "plan-new-${draft.studentId}" },
                     studentId = draft.studentId,
                     roomName = draft.roomName,
                     seatNumber = draft.seatNumber,
@@ -550,6 +853,29 @@ class AutomationTaskViewModelTest {
         override suspend fun loadDefaultSeats(): SeatLookupLoadResult = result
 
         override suspend fun loadDefaultSeats(studentId: String): SeatLookupLoadResult = result
+    }
+
+    private class FakeAccountSeatActionExecutor(
+        private val activeBookings: Map<String, List<SeatBookingSnapshotView>> = emptyMap(),
+        private val beforeLoadActiveBookings: suspend () -> Unit = {},
+    ) : AccountSeatActionExecutor {
+        override suspend fun loadSnapshot(studentId: String): SeatBookingSnapshotView =
+            activeBookings[studentId]?.firstOrNull() ?: SeatBookingSnapshotView()
+
+        override suspend fun loadActiveBookings(studentId: String): List<SeatBookingSnapshotView> {
+            beforeLoadActiveBookings()
+            return activeBookings[studentId].orEmpty()
+        }
+
+        override suspend fun performAction(
+            studentId: String,
+            action: AccountSeatAction,
+            bookingId: String?,
+        ): AccountSeatActionExecutionResult =
+            AccountSeatActionExecutionResult(
+                message = "未使用",
+                updatedSnapshot = loadSnapshot(studentId),
+            )
     }
 
     private class FakeSessionRepository : SessionRepository {

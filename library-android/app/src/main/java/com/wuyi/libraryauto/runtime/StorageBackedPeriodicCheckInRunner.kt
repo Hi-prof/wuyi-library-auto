@@ -23,10 +23,6 @@ import com.wuyi.libraryauto.core.network.seat.CookieSchoolSeatApi
 import com.wuyi.libraryauto.core.network.seat.SchoolSeatApi
 import com.wuyi.libraryauto.core.network.seat.SeatBookingActionService
 import com.wuyi.libraryauto.core.network.seat.SeatBookingStatusService
-import com.wuyi.libraryauto.core.runtime.network.ActiveWifiReconnector
-import com.wuyi.libraryauto.core.runtime.network.AndroidWorkerNetworkManager
-import com.wuyi.libraryauto.core.runtime.network.BackgroundNetworkRecoveryCoordinator
-import com.wuyi.libraryauto.core.runtime.network.CaptivePortalRecoveryProvider
 import com.wuyi.libraryauto.core.runtime.sync.ReservationSyncCoordinator
 import com.wuyi.libraryauto.core.runtime.worker.AutomationPlanRunner
 import com.wuyi.libraryauto.core.runtime.worker.PeriodicCheckInRunner
@@ -37,7 +33,6 @@ import com.wuyi.libraryauto.core.storage.credentials.SavedAccountStore
 import com.wuyi.libraryauto.core.storage.db.ReservationTaskDao
 import com.wuyi.libraryauto.core.storage.db.ReservationTaskEntity
 import com.wuyi.libraryauto.core.storage.db.StorageDatabaseProvider
-import com.wuyi.libraryauto.core.storage.network.WifiReconnectStore
 import com.wuyi.libraryauto.ui.repository.SchoolPortalConfig
 import com.wuyi.libraryauto.ui.repository.account.StoredSavedAccountRepository
 import com.wuyi.libraryauto.ui.repository.auth.SchoolLoginGateway
@@ -104,25 +99,6 @@ internal class StorageBackedPeriodicCheckInRunner(
             seatServiceOrigins = listOf(SchoolPortalConfig.SeatServiceOrigin),
         )
 
-    /**
-     * BUG-CAPTIVE 修复：周期签到不再依赖 WorkManager 的 NetworkType.CONNECTED 约束，
-     * 改在 [run] 里主动调一次后台网络恢复（含 captive portal 自动认证），
-     * 让校园网未登录的链路也能通过自动重连或自动认证恢复。
-     */
-    private val networkRecoveryCoordinator =
-        BackgroundNetworkRecoveryCoordinator(
-            networkManager = AndroidWorkerNetworkManager(appContext),
-            activeWifiReconnector =
-                ActiveWifiReconnector(
-                    context = appContext,
-                    wifiManager =
-                        appContext.getSystemService(android.content.Context.WIFI_SERVICE) as android.net.wifi.WifiManager,
-                    connectivityManager =
-                        appContext.getSystemService(android.net.ConnectivityManager::class.java),
-                ),
-            captivePortalRunner = CaptivePortalRecoveryProvider.get(appContext),
-        )
-    private val wifiReconnectStore = WifiReconnectStore(appContext)
     private val reservationSyncCoordinator =
         ReservationSyncCoordinator(
             reservationTaskDao = reservationTaskDao,
@@ -138,9 +114,6 @@ internal class StorageBackedPeriodicCheckInRunner(
         )
 
     override suspend fun run(source: TriggerSource): PeriodicCheckInSummary {
-        // 先做一次后台网络恢复：网络可用直接通过；处于 captive portal 时尝试自动认证；
-        // 链路真断时尝试主动 Wi-Fi 重连。失败也继续往下跑，让原有签到逻辑写出更具体的失败原因。
-        runCatching { networkRecoveryCoordinator.recoverIfNeeded(currentRecoverySettings()) }
         // 在跑签到 use case 之前先同步一遍每个账号的远端预约：把外部预约（网页/别的端）补成本地
         // reservation_tasks 行并入队各自的 GuardWorker，保证「检测到账号有预约就有独立 GuardWorker」
         // 的语义；同时清理过期 bookingId 的 mutex 缓存，避免内存随天数线性增长。
@@ -430,17 +403,6 @@ internal class StorageBackedPeriodicCheckInRunner(
             }
             return SignInError.Unknown
         }
-    }
-
-    private fun currentRecoverySettings(): com.wuyi.libraryauto.core.runtime.network.WifiReconnectSettings {
-        val snapshot = wifiReconnectStore.loadSnapshot()
-        return com.wuyi.libraryauto.core.runtime.network.WifiReconnectSettings(
-            enabled = snapshot.enabled,
-            primaryNetwork = snapshot.primaryNetwork,
-            candidateNetworks = snapshot.candidateNetworks,
-            recoveryTimeoutSeconds = snapshot.recoveryTimeoutSeconds,
-            attemptTimeoutSeconds = snapshot.attemptTimeoutSeconds,
-        )
     }
 
     private companion object {

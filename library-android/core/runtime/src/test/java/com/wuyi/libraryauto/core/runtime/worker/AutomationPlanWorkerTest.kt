@@ -6,7 +6,6 @@ import com.wuyi.libraryauto.core.domain.usecase.ReservationWindow
 import com.wuyi.libraryauto.core.network.auth.AuthenticatedSession
 import com.wuyi.libraryauto.core.network.auth.SessionBundle
 import com.wuyi.libraryauto.core.network.seat.BookingDetail
-import com.wuyi.libraryauto.core.runtime.network.NetworkRecoveryResult
 import com.wuyi.libraryauto.core.storage.credentials.SavedAccountStore
 import com.wuyi.libraryauto.core.storage.db.AutomationPlanEntity
 import com.wuyi.libraryauto.core.storage.db.ExecutionLogEntity
@@ -143,44 +142,6 @@ class AutomationPlanWorkerTest {
     }
 
     @Test
-    fun `worker recovers network before login when current network is unavailable`() = runTest {
-        val dependencies =
-            FakeAutomationPlanWorkerDependencies().apply {
-                networkRecoveryResult = NetworkRecoveryResult(recovered = true, message = "已恢复到 Wuyi-5G")
-            }
-
-        val result =
-            AutomationPlanWorker.executeOnce(
-                planId = "plan-1",
-                nowEpochSeconds = 1_712_800_000L,
-                dependencies = dependencies,
-            )
-
-        assertEquals(Result.success(), result)
-        assertEquals(4, dependencies.networkRecoveryCallCount)
-        assertTrue(dependencies.loginCalled)
-    }
-
-    @Test
-    fun `worker stores network recovery failure and skips login when recovery does not succeed`() = runTest {
-        val dependencies =
-            FakeAutomationPlanWorkerDependencies().apply {
-                networkRecoveryResult = NetworkRecoveryResult(recovered = false, message = "已尝试指定 Wi-Fi，当前仍无可用网络")
-            }
-
-        val result =
-            AutomationPlanWorker.executeOnce(
-                planId = "plan-1",
-                nowEpochSeconds = 1_712_800_000L,
-                dependencies = dependencies,
-            )
-
-        assertEquals(Result.success(), result)
-        assertEquals("已尝试指定 Wi-Fi，当前仍无可用网络", dependencies.savedPlan?.lastResultMessage)
-        assertTrue(!dependencies.loginCalled)
-    }
-
-    @Test
     fun `worker logs empty ibeacon and fallback window when booking detail has no minors`() = runTest {
         val dependencies =
             FakeAutomationPlanWorkerDependencies().apply {
@@ -238,8 +199,6 @@ class AutomationPlanWorkerTest {
         val bookingDetailsByBookingId = mutableMapOf<String, BookingDetail>()
         var pauseBetweenAttemptsCallCount = 0
         var retryPauseCallCount = 0
-        var networkRecoveryResult = NetworkRecoveryResult(recovered = true, message = "当前网络可用")
-        var networkRecoveryCallCount = 0
         var loginCalled = false
         private var nextBookingNumber = 166
 
@@ -275,11 +234,6 @@ class AutomationPlanWorkerTest {
         ): AuthenticatedSession {
             loginCalled = true
             return session
-        }
-
-        override suspend fun ensureNetworkForBackgroundWork(): NetworkRecoveryResult {
-            networkRecoveryCallCount += 1
-            return networkRecoveryResult
         }
 
         override fun buildContinuousWindows(nowEpochSeconds: Long): List<ReservationWindow> =

@@ -1,8 +1,6 @@
 package com.wuyi.libraryauto.core.runtime.worker
 
 import android.content.Context
-import android.net.ConnectivityManager
-import android.net.wifi.WifiManager
 import androidx.work.CoroutineWorker
 import androidx.work.ExistingWorkPolicy
 import androidx.work.OneTimeWorkRequest
@@ -31,12 +29,6 @@ import com.wuyi.libraryauto.core.network.seat.SeatBookingSnapshot
 import com.wuyi.libraryauto.core.network.seat.SeatBookingStatusService
 import com.wuyi.libraryauto.core.runtime.beacon.BeaconScanCoordinator
 import com.wuyi.libraryauto.core.runtime.beacon.StorageBeaconScanAuditWriter
-import com.wuyi.libraryauto.core.runtime.network.ActiveWifiReconnector
-import com.wuyi.libraryauto.core.runtime.network.AndroidWorkerNetworkManager
-import com.wuyi.libraryauto.core.runtime.network.BackgroundNetworkRecoveryCoordinator
-import com.wuyi.libraryauto.core.runtime.network.CaptivePortalRecoveryProvider
-import com.wuyi.libraryauto.core.runtime.network.NetworkRecoveryResult
-import com.wuyi.libraryauto.core.runtime.network.WifiReconnectSettings
 import com.wuyi.libraryauto.core.runtime.service.BeaconForegroundServiceController
 import com.wuyi.libraryauto.core.storage.audit.BeaconScanAuditRepository
 import com.wuyi.libraryauto.core.storage.audit.SignInAuditRepository
@@ -46,8 +38,6 @@ import com.wuyi.libraryauto.core.storage.db.ExecutionLogEntity
 import com.wuyi.libraryauto.core.storage.db.ReservationTaskDao
 import com.wuyi.libraryauto.core.storage.db.ReservationTaskEntity
 import com.wuyi.libraryauto.core.storage.db.StorageDatabaseProvider
-import com.wuyi.libraryauto.core.storage.network.WifiReconnectSnapshot
-import com.wuyi.libraryauto.core.storage.network.WifiReconnectStore
 import androidx.room.withTransaction
 import java.util.concurrent.TimeUnit
 import kotlin.math.max
@@ -101,8 +91,7 @@ class ReservationGuardWorker(
         private const val UNIQUE_WORK_NAME_PREFIX = "reservation-guard"
         internal const val KEY_TASK_ID = "taskId"
         private const val RETRY_INTERVAL_SECONDS = 60L
-        // BUG-RETRY 修复：失败时按指数退避，避免 captive portal 未通过/学校接口失败时
-        // 60 秒一次硬打。退避在窗口内最大不超过 5 分钟。
+        // Back off failed guard attempts so transient school API failures do not retry every 60 seconds.
         private const val MAX_RETRY_INTERVAL_SECONDS = 300L
         private const val SIGNIN_AUDIT_MESSAGE_MAX_LENGTH = 1_024
         private const val HTTP_UNAUTHORIZED = 401
@@ -145,17 +134,6 @@ class ReservationGuardWorker(
                     message = "未找到 ${task.studentId} 的本地账号，无法自动签到。",
                     dependencies = dependencies,
                 )
-            val networkRecovery = dependencies.ensureNetworkForBackgroundWork()
-            if (!networkRecovery.recovered) {
-                return retryOrFail(
-                    task = task,
-                    nowEpochSeconds = nowEpochSeconds,
-                    deadlineEpochSeconds = deadlineEpochSeconds,
-                    message = networkRecovery.message,
-                    dependencies = dependencies,
-                    scheduleRetry = scheduleRetry,
-                )
-            }
             val session =
                 runCatching {
                     loginMutex.withLock {
@@ -173,10 +151,6 @@ class ReservationGuardWorker(
                 }
             val bookingDetail =
                 runCatching {
-                    val bookingRecovery = dependencies.ensureNetworkForBackgroundWork()
-                    if (!bookingRecovery.recovered) {
-                        throw IllegalStateException(bookingRecovery.message)
-                    }
                     dependencies.loadBookingDetail(task, session)
                 }.getOrElse { error ->
                     return retryOrFail(
@@ -275,10 +249,6 @@ class ReservationGuardWorker(
             dependencies.updateTask(attemptedTask)
             val actionResult =
                 runCatching {
-                    val checkInRecovery = dependencies.ensureNetworkForBackgroundWork()
-                    if (!checkInRecovery.recovered) {
-                        throw IllegalStateException(checkInRecovery.message)
-                    }
                     dependencies.checkIn(session, bookingId)
                 }.getOrElse { error ->
                     val httpStatus = (error as? HttpRequestException)?.statusCode
@@ -646,8 +616,6 @@ class ReservationGuardWorker(
 internal interface ReservationGuardWorkerDependencies {
     suspend fun findTask(taskId: String): ReservationTaskEntity?
 
-    suspend fun ensureNetworkForBackgroundWork(): NetworkRecoveryResult
-
     fun loadSavedAccount(studentId: String): SavedAccountStore.SavedAccount?
 
     fun login(
@@ -714,18 +682,6 @@ private class StorageBackedReservationGuardWorkerDependencies(
     private val savedAccountStore = SavedAccountStore(appContext)
     private val authService = SchoolAuthService()
     private val seatServiceOrigins = listOf(DEFAULT_SEAT_SERVICE_ORIGIN)
-    private val wifiReconnectStore = WifiReconnectStore(appContext)
-    private val networkRecoveryCoordinator =
-        BackgroundNetworkRecoveryCoordinator(
-            networkManager = AndroidWorkerNetworkManager(appContext),
-            activeWifiReconnector =
-                ActiveWifiReconnector(
-                    context = appContext,
-                    wifiManager = appContext.getSystemService(Context.WIFI_SERVICE) as WifiManager,
-                    connectivityManager = appContext.getSystemService(ConnectivityManager::class.java),
-                ),
-            captivePortalRunner = CaptivePortalRecoveryProvider.get(appContext),
-        )
     private val beaconScanCoordinator =
         BeaconScanCoordinator(
             controller = BeaconForegroundServiceController(appContext),
@@ -736,9 +692,6 @@ private class StorageBackedReservationGuardWorkerDependencies(
 
     override suspend fun findTask(taskId: String): ReservationTaskEntity? =
         reservationTaskDao.findById(taskId)
-
-    override suspend fun ensureNetworkForBackgroundWork(): NetworkRecoveryResult =
-        networkRecoveryCoordinator.recoverIfNeeded(wifiReconnectStore.loadSnapshot().toRuntimeSettings())
 
     override fun loadSavedAccount(studentId: String): SavedAccountStore.SavedAccount? =
         savedAccountStore.readAll().firstOrNull { account -> account.studentId == studentId }
@@ -853,12 +806,3 @@ private class StorageBackedReservationGuardWorkerDependencies(
         private val sharedBleScanThrottler = BleScanThrottler()
     }
 }
-
-private fun WifiReconnectSnapshot.toRuntimeSettings(): WifiReconnectSettings =
-    WifiReconnectSettings(
-        enabled = enabled,
-        primaryNetwork = primaryNetwork,
-        candidateNetworks = candidateNetworks,
-        recoveryTimeoutSeconds = recoveryTimeoutSeconds,
-        attemptTimeoutSeconds = attemptTimeoutSeconds,
-    )

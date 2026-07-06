@@ -13,18 +13,30 @@ class SmokeNavigationTest {
     val composeRule = createAndroidComposeRule<MainActivity>()
 
     @Test
-    fun appLaunchesIntoAccountListScreen() {
-        composeRule.onNodeWithText("账号列表").assertIsDisplayed()
-        composeRule.onNodeWithText("手动预约").assertIsDisplayed()
-        composeRule.onNodeWithText("自动任务").assertIsDisplayed()
+    fun appLaunchesIntoTodayOverviewScreenAndPrimaryDestinationsAreReachable() {
+        composeRule.onNodeWithText("首页").assertIsDisplayed()
+        composeRule.onNodeWithText("今日概览").assertIsDisplayed()
+        composeRule.onNodeWithText("总账号数").assertIsDisplayed()
+        composeRule.onNodeWithText("已预约座位").assertIsDisplayed()
+        composeRule.onNodeWithText("一键检查预约").assertIsDisplayed()
+        composeRule.onNodeWithText("一键签到").assertIsDisplayed()
+
+        composeRule.onNodeWithText("账号").assertIsDisplayed()
+        composeRule.onNodeWithText("预约").assertIsDisplayed()
+        composeRule.onNodeWithText("任务").assertIsDisplayed()
         composeRule.onNodeWithText("设置").assertIsDisplayed()
+
+        composeRule.onNodeWithText("预约").performClick()
+        composeRule.onNodeWithText("选择账号").assertIsDisplayed()
+
+        composeRule.onNodeWithText("任务").performClick()
+        composeRule.onNodeWithText("还没有可用账号").assertIsDisplayed()
+
+        composeRule.onNodeWithText("账号").performClick()
+        composeRule.onNodeWithText("账号列表").assertIsDisplayed()
+
         composeRule.onNodeWithText("设置").performClick()
-        composeRule.onNodeWithText("构建信息").assertIsDisplayed()
+        composeRule.onNodeWithText("设置中心").assertIsDisplayed()
         composeRule.onNodeWithText("权限").assertIsDisplayed()
-        composeRule.onNodeWithText("自动预约说明").assertIsDisplayed()
-        composeRule.onNodeWithText("诊断日志").assertIsDisplayed()
-        composeRule.onNodeWithText("权限").performClick()
-        composeRule.onNodeWithText("申请权限").assertIsDisplayed()
-        composeRule.onNodeWithText("无障碍入口").assertIsDisplayed()
     }
 }

@@ -92,11 +92,13 @@ class DesktopSettingsUiTestCase(unittest.TestCase):
 
             self.assertIn("检测网络", network_controls)
             self.assertIn("尝试重连", network_controls)
-            self.assertIn("获取地址", network_controls)
-            self.assertIn("切换到校园网", network_controls)
+            self.assertNotIn("获取地址", network_controls)
+            self.assertNotIn("校园网登录", network_controls)
+            self.assertNotIn("切换到校园网", network_controls)
             self.assertIn("切换稳定性", runtime_controls)
             self.assertIn("复制最近日志", diagnostics_controls)
-            self.assertIn("校园网诊断", diagnostics_controls)
+            self.assertIn("网络诊断", diagnostics_controls)
+            self.assertNotIn("校园网诊断", diagnostics_controls)
             self.assertIn("清空全部日志", diagnostics_controls)
             self.assertTrue(any(isinstance(widget, tk.Checkbutton) for widget in _walk_widgets(network_page)))
         finally:
@@ -184,7 +186,7 @@ class DesktopSettingsUiTestCase(unittest.TestCase):
         finally:
             window.close()
 
-    def test_submit_network_action_saves_form_before_campus_login(self) -> None:
+    def test_submit_network_action_saves_form_before_reconnect(self) -> None:
         from wuyi_seat_bot.desktop_settings.window import SettingsWindow
 
         service = _WindowNetworkActionServiceStub()
@@ -194,11 +196,6 @@ class DesktopSettingsUiTestCase(unittest.TestCase):
         window.network_enabled_var = tk.BooleanVar(master=runtime, value=False)
         window.interval_var = tk.IntVar(master=runtime, value=120)
         window.preferred_wifi_text = _TextValueStub("图书馆 Wi-Fi\n")
-        window.campus_network_enabled_var = tk.BooleanVar(master=runtime, value=True)
-        window.campus_wifi_name_var = tk.StringVar(master=runtime, value="WYU")
-        window.campus_login_url_var = tk.StringVar(master=runtime, value="https://sso.wuyiu.edu.cn/login?service=")
-        window.campus_username_var = tk.StringVar(master=runtime, value="20231121150")
-        window.campus_password_var = tk.StringVar(master=runtime, value="secret")
         window.message_var = tk.StringVar(master=runtime, value="")
         window._save_form_settings = SettingsWindow._save_form_settings.__get__(window, SettingsWindow)
         window._build_settings_payload = SettingsWindow._build_settings_payload.__get__(window, SettingsWindow)
@@ -206,23 +203,16 @@ class DesktopSettingsUiTestCase(unittest.TestCase):
         window._show_error = lambda exc: self.fail(f"submit_network_action 不应报错：{exc}")
         window._apply_payload = lambda payload, update_form=False: window.message_var.set(str(payload.get("message", "")))
 
-        window.submit_network_action("run_campus_network_login")
+        window.submit_network_action("run_network_reconnect")
 
         self.assertEqual(
             service.events,
-            ["save_settings", "run_campus_network_login"],
+            ["save_settings", "run_network_reconnect"],
         )
-        self.assertEqual(
-            service.saved_payloads[0]["campusNetwork"]["username"],
-            "20231121150",
-        )
-        self.assertEqual(
-            service.saved_payloads[0]["campusNetwork"]["password"],
-            "secret",
-        )
-        self.assertEqual(window.message_var.get(), "已尝试校园网认证")
+        self.assertNotIn("campusNetwork", service.saved_payloads[0])
+        self.assertEqual(window.message_var.get(), "已尝试网络重连")
 
-    def test_submit_network_action_saves_form_before_switching_to_campus_wifi(self) -> None:
+    def test_window_no_longer_exposes_campus_network_actions(self) -> None:
         from wuyi_seat_bot.desktop_settings.window import SettingsWindow
 
         service = _WindowNetworkActionServiceStub()
@@ -232,66 +222,12 @@ class DesktopSettingsUiTestCase(unittest.TestCase):
         window.network_enabled_var = tk.BooleanVar(master=runtime, value=False)
         window.interval_var = tk.IntVar(master=runtime, value=120)
         window.preferred_wifi_text = _TextValueStub("图书馆 Wi-Fi\n")
-        window.campus_network_enabled_var = tk.BooleanVar(master=runtime, value=True)
-        window.campus_wifi_name_var = tk.StringVar(master=runtime, value="WYU")
-        window.campus_login_url_var = tk.StringVar(master=runtime, value="https://sso.wuyiu.edu.cn/login?service=")
-        window.campus_username_var = tk.StringVar(master=runtime, value="20231121150")
-        window.campus_password_var = tk.StringVar(master=runtime, value="secret")
-        window.message_var = tk.StringVar(master=runtime, value="")
-        window._save_form_settings = SettingsWindow._save_form_settings.__get__(window, SettingsWindow)
         window._build_settings_payload = SettingsWindow._build_settings_payload.__get__(window, SettingsWindow)
         window._collect_wifi_names = SettingsWindow._collect_wifi_names.__get__(window, SettingsWindow)
-        window._show_error = lambda exc: self.fail(f"submit_network_action 不应报错：{exc}")
-        window._apply_payload = lambda payload, update_form=False: window.message_var.set(str(payload.get("message", "")))
 
-        window.submit_network_action("run_switch_to_campus_wifi")
-
-        self.assertEqual(
-            service.events,
-            ["save_settings", "run_switch_to_campus_wifi"],
-        )
-        self.assertEqual(window.message_var.get(), "已尝试切换到校园网")
-
-    def test_refresh_campus_login_url_saves_form_and_updates_field(self) -> None:
-        from wuyi_seat_bot.desktop_settings.window import SettingsWindow
-
-        service = _WindowNetworkActionServiceStub()
-        runtime = _create_tcl_runtime(self)
-        window = SettingsWindow.__new__(SettingsWindow)
-        window.service = service
-        window.network_enabled_var = tk.BooleanVar(master=runtime, value=False)
-        window.interval_var = tk.IntVar(master=runtime, value=120)
-        window.preferred_wifi_text = _TextValueStub("图书馆 Wi-Fi\n")
-        window.campus_network_enabled_var = tk.BooleanVar(master=runtime, value=True)
-        window.campus_wifi_name_var = tk.StringVar(master=runtime, value="WYU")
-        window.campus_login_url_var = tk.StringVar(master=runtime, value="")
-        window.campus_username_var = tk.StringVar(master=runtime, value="20231121150")
-        window.campus_password_var = tk.StringVar(master=runtime, value="secret")
-        window.message_var = tk.StringVar(master=runtime, value="")
-        window._save_form_settings = SettingsWindow._save_form_settings.__get__(window, SettingsWindow)
-        window._build_settings_payload = SettingsWindow._build_settings_payload.__get__(window, SettingsWindow)
-        window._collect_wifi_names = SettingsWindow._collect_wifi_names.__get__(window, SettingsWindow)
-        window._show_error = lambda exc: self.fail(f"refresh_campus_login_url 不应报错：{exc}")
-        window._apply_settings_form = SettingsWindow._apply_settings_form.__get__(window, SettingsWindow)
-
-        def apply_payload(payload: dict[str, object], update_form: bool = False) -> None:
-            if update_form:
-                window._apply_settings_form(payload["settings"])
-            window.message_var.set(str(payload.get("message", "")))
-
-        window._apply_payload = apply_payload
-
-        window.refresh_campus_login_url()
-
-        self.assertEqual(
-            service.events,
-            ["save_settings", "refresh_campus_login_url"],
-        )
-        self.assertEqual(
-            window.campus_login_url_var.get(),
-            "https://sso.wuyiu.edu.cn/login?service=https%3A%2F%2Fexample.com",
-        )
-        self.assertEqual(window.message_var.get(), "已获取校园网登录地址")
+        self.assertFalse(hasattr(window, "refresh_campus_login_url"))
+        self.assertFalse(hasattr(window, "refresh_campus_login_url_async"))
+        self.assertNotIn("campusNetwork", window._build_settings_payload())
 
 
 class _ServiceStub:
@@ -330,48 +266,19 @@ class _WindowNetworkActionServiceStub:
             message="设置已保存",
         )
 
-    def run_campus_network_login(self) -> dict[str, object]:
-        self.events.append("run_campus_network_login")
+    def run_network_reconnect(self) -> dict[str, object]:
+        self.events.append("run_network_reconnect")
         settings = self.saved_payloads[-1]
         return _build_window_payload(
             settings=settings,
-            message="已尝试校园网认证",
+            message="已尝试网络重连",
             network_status={
                 "networkState": "online",
-                "message": "校园网认证成功",
-                "updatedAt": "2026-04-22T18:20:00",
-                "reconnectState": "authenticated",
-                "wifiName": "WYU",
-            },
-        )
-
-    def run_switch_to_campus_wifi(self) -> dict[str, object]:
-        self.events.append("run_switch_to_campus_wifi")
-        settings = self.saved_payloads[-1]
-        return _build_window_payload(
-            settings=settings,
-            message="已尝试切换到校园网",
-            network_status={
-                "networkState": "online",
-                "message": "已切换到 WYU 并恢复联网",
+                "message": "已恢复联网",
                 "updatedAt": "2026-04-23T22:10:00",
                 "reconnectState": "reconnected",
-                "wifiName": "WYU",
+                "wifiName": "图书馆 Wi-Fi",
             },
-        )
-
-    def refresh_campus_login_url(self) -> dict[str, object]:
-        self.events.append("refresh_campus_login_url")
-        settings = self.saved_payloads[-1]
-        return _build_window_payload(
-            settings={
-                **settings,
-                "campusNetwork": {
-                    **settings["campusNetwork"],
-                    "loginUrl": "https://sso.wuyiu.edu.cn/login?service=https%3A%2F%2Fexample.com",
-                },
-            },
-            message="已获取校园网登录地址",
         )
 
 
@@ -385,11 +292,6 @@ class _WindowStub:
         self.network_updated_at_var = tk.StringVar(master=root, value="2026-04-07T21:38:11")
         self.network_reconnect_var = tk.StringVar(master=root, value="--")
         self.network_wifi_var = tk.StringVar(master=root, value="--")
-        self.campus_network_enabled_var = tk.BooleanVar(master=root, value=True)
-        self.campus_wifi_name_var = tk.StringVar(master=root, value="WYU")
-        self.campus_login_url_var = tk.StringVar(master=root, value="")
-        self.campus_username_var = tk.StringVar(master=root, value="")
-        self.campus_password_var = tk.StringVar(master=root, value="")
         self.stability_var = tk.StringVar(master=root, value="未启用")
         self.runtime_vars = {
             "supervisorState": tk.StringVar(master=root, value="running"),
@@ -423,10 +325,6 @@ class _WindowStub:
     def copy_recent_logs() -> None:
         return None
 
-    @staticmethod
-    def refresh_campus_login_url() -> None:
-        return None
-
 
 class _TextValueStub:
     def __init__(self, value: str) -> None:
@@ -453,13 +351,6 @@ def _build_window_payload(
             "enabled": False,
             "intervalMinutes": 120,
             "preferredWifiNames": ["图书馆 Wi-Fi"],
-        },
-        "campusNetwork": {
-            "enabled": True,
-            "wifiName": "WYU",
-            "loginUrl": "",
-            "username": "",
-            "password": "",
         },
     }
     resolved_network_status = network_status or {
@@ -489,7 +380,7 @@ def _build_window_payload(
             "supervisorLogPath": "supervisor.log",
             "networkMonitorLogPath": "network-monitor.log",
             "logDirectoryPath": "runtime\\logs",
-            "recentLogsPreview": "[工作日志]\n最近一条工作日志\n\n[守护日志]\n最近一条守护日志\n\n[校园网诊断]\n最近一条校园网诊断日志",
+            "recentLogsPreview": "[工作日志]\n最近一条工作日志\n\n[守护日志]\n最近一条守护日志\n\n[网络诊断]\n最近一条网络诊断日志",
         },
         "message": message,
     }

@@ -585,7 +585,7 @@ class NetworkMonitorTestCase(unittest.TestCase):
         self.assertIn("连接 WYU：returncode=1", log_content)
         self.assertIn("检测结果：通用网络探测未通过，当前可能未联网", log_content)
 
-    def test_reconnect_once_attempts_campus_auth_after_wifi_connects(self) -> None:
+    def test_reconnect_once_does_not_attempt_campus_auth_after_wifi_connects(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             config_path = Path(tmp_dir) / "config.json"
             config_path.write_text("{}", encoding="utf-8")
@@ -600,14 +600,7 @@ class NetworkMonitorTestCase(unittest.TestCase):
                             "enabled": True,
                             "intervalMinutes": 120,
                             "preferredWifiNames": ["WYU"],
-                        },
-                        "campusNetwork": {
-                            "enabled": True,
-                            "wifiName": "WYU",
-                            "loginUrl": "https://sso.wuyiu.edu.cn/login?service=",
-                            "username": "20231121150",
-                            "password": "secret",
-                        },
+                        }
                     },
                 ),
                 patch(
@@ -632,22 +625,18 @@ class NetworkMonitorTestCase(unittest.TestCase):
                             "message": "Wi-Fi 已连接但未认证",
                             "connectedInterfaces": ["WYU"],
                         },
-                        {
-                            "networkState": "online",
-                            "message": "网络连接正常",
-                            "connectedInterfaces": ["WYU"],
-                        },
                     ],
                 ),
                 patch(
                     "wuyi_seat_bot.network_monitor._perform_campus_network_login",
                     return_value=(True, "校园网认证成功"),
-                ),
+                ) as perform_login,
             ):
                 result = monitor.reconnect_once()
 
-        self.assertEqual(result["networkState"], "online")
-        self.assertEqual(result["reconnectState"], "authenticated")
+        perform_login.assert_not_called()
+        self.assertEqual(result["networkState"], "offline")
+        self.assertEqual(result["reconnectState"], "failed")
         self.assertEqual(result["wifiName"], "WYU")
 
     def test_build_campus_login_payload_matches_current_sso_form(self) -> None:

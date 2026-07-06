@@ -54,7 +54,6 @@ class SeatWebRequestHandler(BaseHTTPRequestHandler):
         "/api/settings": ("save_settings", HTTPStatus.OK, True),
         "/api/settings/network/check": ("run_network_check", HTTPStatus.OK, False),
         "/api/settings/network/reconnect": ("run_network_reconnect", HTTPStatus.OK, False),
-        "/api/settings/network/campus-login": ("run_campus_network_login", HTTPStatus.OK, False),
         "/api/settings/stability": ("update_stability_enhancement", HTTPStatus.OK, True),
         "/api/settings/logs/open": ("open_diagnostics_target", HTTPStatus.OK, True),
         "/api/accounts/refresh-login": ("refresh_account_login", HTTPStatus.OK, True),

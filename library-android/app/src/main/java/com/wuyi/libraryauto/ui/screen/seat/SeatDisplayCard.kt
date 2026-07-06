@@ -44,9 +44,15 @@ fun SeatDisplayRoomCard(
     onRefreshSingle: (String) -> Unit,
 ) {
     val selectedSeat = room.seats.firstOrNull { seat -> seat.key == selectedSeatKey }
+    val presentation =
+        buildSeatDisplayRoomPresentation(
+            room = room,
+            expanded = expanded,
+            selectedSeatKey = selectedSeatKey,
+        )
     Surface(
         shape = RoundedCornerShape(20.dp),
-        color = MaterialTheme.colorScheme.surface,
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
         tonalElevation = 1.dp,
         modifier = Modifier.fillMaxWidth(),
     ) {
@@ -61,18 +67,18 @@ fun SeatDisplayRoomCard(
             ) {
                 Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text(
-                        text = room.roomName,
+                        text = presentation.roomName,
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.SemiBold,
                     )
-                    Text(
-                        text = "${room.seats.size} 个座位",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        StatusBadge(text = presentation.seatCountLabel, tone = StatusTone.Neutral)
+                        StatusBadge(text = presentation.accountCountLabel, tone = StatusTone.Info)
+                        StatusBadge(text = presentation.healthLabel, tone = presentation.healthTone)
+                    }
                 }
                 Text(
-                    text = if (expanded) "收起" else "展开",
+                    text = presentation.expandActionLabel,
                     style = MaterialTheme.typography.labelLarge,
                     color = MaterialTheme.colorScheme.primary,
                 )
@@ -137,6 +143,12 @@ fun SeatDisplayRoomCard(
                         }
                     }
                 }
+            } else {
+                Text(
+                    text = presentation.collapsedHint,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
         }
     }

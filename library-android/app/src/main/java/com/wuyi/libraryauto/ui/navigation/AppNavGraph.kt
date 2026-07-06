@@ -5,17 +5,16 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Chair
 import androidx.compose.material.icons.filled.EventSeat
+import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.ManageAccounts
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.TaskAlt
-import androidx.compose.material.icons.outlined.Chair
 import androidx.compose.material.icons.outlined.EventSeat
+import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.ManageAccounts
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.TaskAlt
-import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -25,6 +24,7 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -41,51 +41,43 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.wuyi.libraryauto.ui.screen.account.AccountManagementScreen
+import com.wuyi.libraryauto.ui.screen.home.TodayOverviewScreen
 import com.wuyi.libraryauto.ui.screen.login.LoginScreen
 import com.wuyi.libraryauto.ui.screen.seat.SeatDisplayScreen
 import com.wuyi.libraryauto.ui.screen.seat.SeatLookupScreen
 import com.wuyi.libraryauto.ui.screen.session.SessionBootstrapHost
 import com.wuyi.libraryauto.ui.screen.settings.AutomationGuideScreen
 import com.wuyi.libraryauto.ui.screen.settings.BuildInfoScreen
-import com.wuyi.libraryauto.ui.screen.settings.CampusNetworkScreen
 import com.wuyi.libraryauto.ui.screen.settings.DiagnosticsScreen
-import com.wuyi.libraryauto.ui.screen.settings.NetworkMonitoringScreen
 import com.wuyi.libraryauto.ui.screen.settings.PermissionsScreen
 import com.wuyi.libraryauto.ui.screen.settings.RuntimeGuideScreen
 import com.wuyi.libraryauto.ui.screen.settings.ServerSyncScreen
 import com.wuyi.libraryauto.ui.screen.settings.SettingsAutomationGuideRoute
 import com.wuyi.libraryauto.ui.screen.settings.SettingsBuildInfoRoute
-import com.wuyi.libraryauto.ui.screen.settings.SettingsCampusNetworkRoute
 import com.wuyi.libraryauto.ui.screen.settings.SettingsDiagnosticsRoute
 import com.wuyi.libraryauto.ui.screen.settings.SettingsHomeRoute
 import com.wuyi.libraryauto.ui.screen.settings.SettingsHomeScreen
-import com.wuyi.libraryauto.ui.screen.settings.SettingsNetworkMonitoringRoute
 import com.wuyi.libraryauto.ui.screen.settings.SettingsPermissionsRoute
 import com.wuyi.libraryauto.ui.screen.settings.SettingsRuntimeGuideRoute
 import com.wuyi.libraryauto.ui.screen.settings.SettingsServerSyncRoute
 import com.wuyi.libraryauto.ui.screen.settings.SettingsSignInMonitoringRoute
 import com.wuyi.libraryauto.ui.screen.settings.SettingsWatchdogStatusRoute
-import com.wuyi.libraryauto.ui.screen.settings.SettingsWifiReconnectRoute
 import com.wuyi.libraryauto.ui.screen.settings.SignInMonitoringScreen
 import com.wuyi.libraryauto.ui.screen.settings.WatchdogStatusScreen
-import com.wuyi.libraryauto.ui.screen.settings.WifiReconnectSettingsScreen
-import com.wuyi.libraryauto.ui.screen.settings.findSettingsDestination
 import com.wuyi.libraryauto.ui.screen.settings.settingsRoutes
 import com.wuyi.libraryauto.ui.screen.task.TaskListScreen
 
 object AppRoutes {
+    const val Home = "home"
     const val Accounts = "accounts"
     const val Login = "login"
     const val SeatDisplay = "seatDisplay"
     const val SeatLookup = "seatLookup"
     const val Settings = SettingsHomeRoute
     const val SettingsBuildInfo = SettingsBuildInfoRoute
-    const val SettingsWifiReconnect = SettingsWifiReconnectRoute
     const val SettingsPermissions = SettingsPermissionsRoute
     const val SettingsRuntimeGuide = SettingsRuntimeGuideRoute
     const val SettingsAutomationGuide = SettingsAutomationGuideRoute
-    const val SettingsCampusNetwork = SettingsCampusNetworkRoute
-    const val SettingsNetworkMonitoring = SettingsNetworkMonitoringRoute
     const val SettingsSignInMonitoring = SettingsSignInMonitoringRoute
     const val SettingsWatchdogStatus = SettingsWatchdogStatusRoute
     const val SettingsDiagnostics = SettingsDiagnosticsRoute
@@ -98,7 +90,7 @@ object AppRoutes {
         studentId?.takeIf(String::isNotBlank)?.let { "$Tasks?studentId=$it" } ?: Tasks
 }
 
-private data class TopLevelDestination(
+internal data class TopLevelDestination(
     val route: String,
     val title: String,
     val label: String,
@@ -107,11 +99,19 @@ private data class TopLevelDestination(
     val matchRoutes: Set<String> = setOf(route),
 )
 
-private val topLevelDestinations =
+internal val topLevelDestinations =
     listOf(
         TopLevelDestination(
+            route = AppRoutes.Home,
+            title = "首页",
+            label = "首页",
+            icon = Icons.Outlined.Home,
+            selectedIcon = Icons.Filled.Home,
+            matchRoutes = setOf(AppRoutes.Home, AppRoutes.SeatDisplay),
+        ),
+        TopLevelDestination(
             route = AppRoutes.Accounts,
-            title = "账号",
+            title = "账号列表",
             label = "账号",
             icon = Icons.Outlined.ManageAccounts,
             selectedIcon = Icons.Filled.ManageAccounts,
@@ -122,13 +122,6 @@ private val topLevelDestinations =
             label = "预约",
             icon = Icons.Outlined.EventSeat,
             selectedIcon = Icons.Filled.EventSeat,
-        ),
-        TopLevelDestination(
-            route = AppRoutes.SeatDisplay,
-            title = "座位",
-            label = "座位",
-            icon = Icons.Outlined.Chair,
-            selectedIcon = Icons.Filled.Chair,
         ),
         TopLevelDestination(
             route = AppRoutes.Tasks,
@@ -158,15 +151,15 @@ fun AppNavGraph(modifier: Modifier = Modifier) {
     val currentDestination = backStackEntry?.destination
     val currentRoute = currentDestination?.route
     val currentTopLevelDestination = resolveTopLevelDestination(currentDestination)
-    val currentSettingsDestination = findSettingsDestination(currentRoute)
-    val shellVisible = currentTopLevelDestination != null
-    // 账号列表的顶栏由屏幕内部承接（包含搜索 / 操作菜单 / 多选 ContextualBar），
-    // 这里 shell 不再渲染默认 TopAppBar，避免重复。
-    val showShellTopBar = shellVisible && currentRoute != AppRoutes.Accounts
+    val shellPresentation =
+        buildAppShellPresentation(
+            currentRoute = currentRoute,
+            currentTopLevelDestination = currentTopLevelDestination,
+        )
 
     fun navigateToTopLevel(route: String) {
         navController.navigate(route) {
-            popUpTo(AppRoutes.Accounts) { saveState = true }
+            popUpTo(AppRoutes.Home) { saveState = true }
             launchSingleTop = true
             restoreState = true
         }
@@ -191,38 +184,44 @@ fun AppNavGraph(modifier: Modifier = Modifier) {
         modifier = modifier,
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
-            if (showShellTopBar) {
-                currentTopLevelDestination?.let { destination ->
-                    CenterAlignedTopAppBar(
-                        title = {
-                            Text(
-                                text = currentSettingsDestination?.title ?: destination.title,
-                                style = MaterialTheme.typography.titleLarge,
-                            )
-                        },
-                        navigationIcon = {
-                            if (currentSettingsDestination != null) {
+            shellPresentation.topBar?.let { topBar ->
+                TopAppBar(
+                    title = {
+                        Text(
+                            text = topBar.title,
+                            style = MaterialTheme.typography.titleLarge,
+                        )
+                    },
+                    navigationIcon = {
+                        when (topBar.backTargetRoute) {
+                            AppRoutes.Home ->
+                                IconButton(onClick = { navigateToTopLevel(AppRoutes.Home) }) {
+                                    Icon(
+                                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                        contentDescription = topBar.backContentDescription,
+                                    )
+                                }
+                            AppRoutes.Settings ->
                                 IconButton(onClick = ::navigateToSettingsHome) {
                                     Icon(
                                         imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                                        contentDescription = "返回设置",
+                                        contentDescription = topBar.backContentDescription,
                                     )
                                 }
-                            }
-                        },
-                        colors =
-                            TopAppBarDefaults.centerAlignedTopAppBarColors(
-                                containerColor = MaterialTheme.colorScheme.surface,
-                                scrolledContainerColor = MaterialTheme.colorScheme.surfaceContainer,
-                                titleContentColor = MaterialTheme.colorScheme.onSurface,
-                                navigationIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                            ),
-                    )
-                }
+                        }
+                    },
+                    colors =
+                        TopAppBarDefaults.topAppBarColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                            scrolledContainerColor = MaterialTheme.colorScheme.surfaceContainer,
+                            titleContentColor = MaterialTheme.colorScheme.onSurface,
+                            navigationIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                        ),
+                )
             }
         },
         bottomBar = {
-            if (shellVisible) {
+            if (shellPresentation.bottomBarVisible) {
                 AppBottomBar(
                     currentDestination = currentDestination,
                     onNavigate = ::navigateToTopLevel,
@@ -230,14 +229,24 @@ fun AppNavGraph(modifier: Modifier = Modifier) {
             }
         },
     ) { innerPadding ->
-        Box(
-            modifier = Modifier.fillMaxSize().padding(innerPadding),
-        ) {
+        Box(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
             NavHost(
                 navController = navController,
-                startDestination = AppRoutes.Accounts,
+                startDestination = AppRoutes.Home,
                 modifier = Modifier.fillMaxSize(),
             ) {
+                composable(AppRoutes.Home) {
+                    TodayOverviewScreen(
+                        repository = appDependencies.todayOverviewRepository,
+                        seatDisplayRepository = appDependencies.seatDisplayRepository,
+                        onOpenAccountManager = { navigateToTopLevel(AppRoutes.Accounts) },
+                        onOpenAddAccount = { navController.navigate(AppRoutes.Login) },
+                        onOpenManualReservation = { navigateToTopLevel(AppRoutes.SeatLookup) },
+                        onOpenSeatDisplay = { navController.navigate(AppRoutes.SeatDisplay) },
+                        onOpenTasks = { navigateToTopLevel(AppRoutes.Tasks) },
+                        onOpenSettings = { navigateToTopLevel(AppRoutes.Settings) },
+                    )
+                }
                 composable(AppRoutes.Accounts) {
                     AccountManagementScreen(
                         accountRepository = appDependencies.savedAccountRepository,
@@ -259,10 +268,10 @@ fun AppNavGraph(modifier: Modifier = Modifier) {
                         onOpenPermissionHelp = { navigateToTopLevel(AppRoutes.SettingsPermissions) },
                         loginGateway = appDependencies.loginGateway,
                         title = "添加账号",
-                        description = "添加账号后会回到账号列表，方便继续查看状态、设置当前账号或打开自动任务。",
-                        hint = "密码可以留空，默认会使用学号。认证成功后会同时保存加密凭据和该账号的会话。",
+                        description = "添加账号后回到账号列表，方便继续查看状态、设置当前账号或打开自动任务。",
+                        hint = "密码可以留空，默认会使用学号。认证成功后会保存凭据和会话。",
                         primaryButtonLabel = "保存账号并返回账号列表",
-                        secondaryButtonLabel = "查看设置里的权限模块",
+                        secondaryButtonLabel = "查看权限设置",
                     )
                 }
                 composable(AppRoutes.SeatLookup) {
@@ -298,6 +307,7 @@ fun AppNavGraph(modifier: Modifier = Modifier) {
                         sessionRepository = appDependencies.sessionRepository,
                         historyReader = appDependencies.accountReservationHistoryReader,
                         diagnosticsLogRepository = appDependencies.diagnosticsLogRepository,
+                        accountSeatActionExecutor = appDependencies.accountSeatActionRepository,
                         studentIdFilter = entry.arguments?.getString(AppRoutes.StudentIdArg).orEmpty(),
                         onOpenAccounts = { navigateToTopLevel(AppRoutes.Accounts) },
                         onClearStudentFilter = { navigateToTopLevel(AppRoutes.Tasks) },
@@ -311,9 +321,6 @@ fun AppNavGraph(modifier: Modifier = Modifier) {
                 composable(AppRoutes.SettingsBuildInfo) {
                     BuildInfoScreen()
                 }
-                composable(AppRoutes.SettingsWifiReconnect) {
-                    WifiReconnectSettingsScreen()
-                }
                 composable(AppRoutes.SettingsPermissions) {
                     PermissionsScreen()
                 }
@@ -322,21 +329,6 @@ fun AppNavGraph(modifier: Modifier = Modifier) {
                 }
                 composable(AppRoutes.SettingsAutomationGuide) {
                     AutomationGuideScreen()
-                }
-                composable(AppRoutes.SettingsCampusNetwork) {
-                    CampusNetworkScreen(
-                        credentialStore = appDependencies.campusNetworkCredentialStore,
-                        metricsRepository = appDependencies.networkMonitorMetricsRepository,
-                        executionLogRepository = appDependencies.executionLogRepository,
-                        authenticator = appDependencies.campusPortalAuthenticator,
-                        portalLoginPageUrlProvider = appDependencies.campusPortalLoginPageUrlProvider,
-                    )
-                }
-                composable(AppRoutes.SettingsNetworkMonitoring) {
-                    NetworkMonitoringScreen(
-                        metricsRepository = appDependencies.networkMonitorMetricsRepository,
-                        wifiReconnectStore = appDependencies.wifiReconnectStore,
-                    )
                 }
                 composable(AppRoutes.SettingsSignInMonitoring) {
                     SignInMonitoringScreen(
@@ -358,7 +350,7 @@ fun AppNavGraph(modifier: Modifier = Modifier) {
                     ServerSyncScreen(dependencies = appDependencies)
                 }
             }
-            // 登录接口有时先返回只够 API 复用的 Cookie，这里统一补齐网页侧会话，避免刚登录的账号马上又被页面判成未登录。
+
             SessionBootstrapHost(sessionRepository = appDependencies.sessionRepository)
         }
     }

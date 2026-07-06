@@ -10,7 +10,6 @@ import com.wuyi.libraryauto.core.network.seat.BookingDetail
 import com.wuyi.libraryauto.core.network.seat.SeatBookingActionResult
 import com.wuyi.libraryauto.core.network.seat.SeatBookingLiveState
 import com.wuyi.libraryauto.core.network.seat.SeatBookingSnapshot
-import com.wuyi.libraryauto.core.runtime.network.NetworkRecoveryResult
 import com.wuyi.libraryauto.core.storage.credentials.SavedAccountStore
 import com.wuyi.libraryauto.core.storage.db.ExecutionLogEntity
 import com.wuyi.libraryauto.core.storage.db.ReservationTaskEntity
@@ -82,46 +81,6 @@ class ReservationGuardWorkerTest {
         assertEquals("booking-1", dependencies.lastCheckInBookingId)
     }
 
-    @Test
-    fun `executeOnce recovers network before login when current network is unavailable`() = runTest {
-        val dependencies =
-            FakeReservationGuardWorkerDependencies().apply {
-                networkRecoveryResult = NetworkRecoveryResult(recovered = true, message = "已恢复到 Wuyi-5G")
-            }
-
-        val result =
-            ReservationGuardWorker.executeOnce(
-                taskId = "task-1",
-                nowEpochSeconds = 1_712_800_000L,
-                dependencies = dependencies,
-            )
-
-        assertEquals(Result.success(), result)
-        assertEquals(3, dependencies.networkRecoveryCallCount)
-        assertEquals(1, dependencies.loginCallCount)
-    }
-
-    @Test
-    fun `executeOnce stores network recovery failure when recovery does not succeed`() = runTest {
-        val dependencies =
-            FakeReservationGuardWorkerDependencies().apply {
-                networkRecoveryResult = NetworkRecoveryResult(recovered = false, message = "已尝试指定 Wi-Fi，当前仍无可用网络")
-            }
-
-        val result =
-            ReservationGuardWorker.executeOnce(
-                taskId = "task-1",
-                nowEpochSeconds = 1_712_800_000L,
-                dependencies = dependencies,
-                scheduleRetry = { _, _ -> Unit },
-            )
-
-        assertEquals(Result.success(), result)
-        assertEquals("已尝试指定 Wi-Fi，当前仍无可用网络", dependencies.savedTask?.lastError)
-        assertEquals(ReservationTaskState.GUARD_SCHEDULED, dependencies.savedTask?.state)
-        assertEquals(0, dependencies.loginCallCount)
-    }
-
     private class FakeReservationGuardWorkerDependencies(
         private val bookingSnapshot: SeatBookingSnapshot? =
             SeatBookingSnapshot(
@@ -147,8 +106,6 @@ class ReservationGuardWorkerTest {
         val executionLogs = mutableListOf<ExecutionLogEntity>()
         var lastFindTaskId: String? = null
         var lastCheckInBookingId: String? = null
-        var networkRecoveryResult = NetworkRecoveryResult(recovered = true, message = "当前网络可用")
-        var networkRecoveryCallCount = 0
         var loginCallCount = 0
         var refreshLoginCallCount = 0
         var scanOutcome: BleScanOutcome =
@@ -189,11 +146,6 @@ class ReservationGuardWorkerTest {
         ): AuthenticatedSession {
             loginCallCount += 1
             return session
-        }
-
-        override suspend fun ensureNetworkForBackgroundWork(): NetworkRecoveryResult {
-            networkRecoveryCallCount += 1
-            return networkRecoveryResult
         }
 
         override fun loadBooking(

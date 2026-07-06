@@ -13,10 +13,6 @@ from wuyi_seat_bot.desktop_settings.ui_helpers import (
 )
 
 
-def _get_window_attr(window: object, name: str, fallback):
-    return getattr(window, name, fallback)
-
-
 def _run_window_action(window: object, action_name: str) -> None:
     service = getattr(window, "service")
     action = getattr(service, action_name)
@@ -39,14 +35,6 @@ def _submit_network_action(window: object, action_name: str) -> None:
     _run_window_action(window, action_name)
 
 
-def _refresh_campus_login_url(window: object) -> None:
-    refresh_async = getattr(window, "refresh_campus_login_url_async", None)
-    if callable(refresh_async):
-        refresh_async()
-        return
-    window.refresh_campus_login_url()
-
-
 def build_network_page(window: object, parent: tk.Widget) -> tk.Frame:
     page = tk.Frame(parent, bg=PALETTE["background"])
     _build_page_title(page, "网络")
@@ -63,7 +51,6 @@ def build_network_page(window: object, parent: tk.Widget) -> tk.Frame:
     right.grid(row=0, column=1, sticky="nsew", padx=(8, 0))
 
     _build_monitoring_section(window, left, parent)
-    _build_campus_section(window, left, parent)
     _build_network_actions(window, left)
     _build_status_section(window, right)
 
@@ -99,57 +86,6 @@ def _build_monitoring_section(window: object, parent: tk.Widget, root_parent: tk
     card.grid_rowconfigure(row, weight=1)
 
 
-def _build_campus_section(window: object, parent: tk.Widget, root_parent: tk.Widget) -> None:
-    card = build_card(parent, padding=12, tone="blue")
-    card.pack(fill="x", pady=(0, 8))
-    card.grid_columnconfigure(1, weight=1)
-
-    campus_wifi_name_var = _get_window_attr(window, "campus_wifi_name_var", tk.StringVar(master=root_parent, value=""))
-    campus_network_enabled_var = _get_window_attr(window, "campus_network_enabled_var", tk.BooleanVar(master=root_parent, value=False))
-    campus_login_url_var = _get_window_attr(window, "campus_login_url_var", tk.StringVar(master=root_parent, value=""))
-    campus_username_var = _get_window_attr(window, "campus_username_var", tk.StringVar(master=root_parent, value=""))
-    campus_password_var = _get_window_attr(window, "campus_password_var", tk.StringVar(master=root_parent, value=""))
-
-    row = _section_title(card, "校园网认证")
-
-    build_emphasis_checkbutton(
-        card,
-        text="断网时自动认证校园网",
-        variable=campus_network_enabled_var,
-    ).grid(row=row, column=0, columnspan=2, sticky="ew", pady=(0, 10))
-    row += 1
-
-    _field_label(card, row, "校园网 Wi-Fi")
-    style_input_field(tk.Entry(card, textvariable=campus_wifi_name_var)).grid(
-        row=row, column=1, sticky="ew", pady=4,
-    )
-    row += 1
-
-    _field_label(card, row, "登录地址")
-    login_url_row = tk.Frame(card, bg=card.cget("bg"))
-    login_url_row.grid(row=row, column=1, sticky="ew", pady=4)
-    login_url_row.grid_columnconfigure(0, weight=1)
-    style_input_field(tk.Entry(login_url_row, textvariable=campus_login_url_var)).grid(
-        row=0, column=0, sticky="ew",
-    )
-    style_button(
-        tk.Button(login_url_row, text="获取地址", command=lambda: _refresh_campus_login_url(window)),
-        kind="secondary",
-    ).grid(row=0, column=1, padx=(6, 0))
-    row += 1
-
-    _field_label(card, row, "账号")
-    style_input_field(tk.Entry(card, textvariable=campus_username_var)).grid(
-        row=row, column=1, sticky="ew", pady=4,
-    )
-    row += 1
-
-    _field_label(card, row, "密码")
-    style_input_field(tk.Entry(card, textvariable=campus_password_var, show="*")).grid(
-        row=row, column=1, sticky="ew", pady=4,
-    )
-
-
 def _build_network_actions(window: object, parent: tk.Widget) -> None:
     card = build_card(parent, padding=12, tone="default")
     card.pack(fill="x")
@@ -165,14 +101,6 @@ def _build_network_actions(window: object, parent: tk.Widget) -> None:
     style_button(
         tk.Button(action_row, text="尝试重连", command=lambda: _submit_network_action(window, "run_network_reconnect")),
         kind="primary",
-    ).pack(side="left", padx=(0, 6))
-    style_button(
-        tk.Button(action_row, text="校园网登录", command=lambda: _submit_network_action(window, "run_campus_network_login")),
-        kind="secondary",
-    ).pack(side="left", padx=(0, 6))
-    style_button(
-        tk.Button(action_row, text="切换到校园网", command=lambda: _submit_network_action(window, "run_switch_to_campus_wifi")),
-        kind="secondary",
     ).pack(side="left")
 
 
@@ -237,7 +165,7 @@ def build_diagnostics_page(window: object, parent: tk.Widget) -> tk.Frame:
     location_row = _section_title(location_card, "日志位置")
     add_value_row(location_card, row=location_row, label="工作日志", value_var=window.worker_log_path_var)
     add_value_row(location_card, row=location_row + 1, label="守护日志", value_var=window.supervisor_log_path_var)
-    add_value_row(location_card, row=location_row + 2, label="校园网诊断", value_var=window.network_monitor_log_path_var)
+    add_value_row(location_card, row=location_row + 2, label="网络诊断", value_var=window.network_monitor_log_path_var)
     add_value_row(location_card, row=location_row + 3, label="日志目录", value_var=window.log_directory_path_var)
 
     button_row = tk.Frame(location_card, bg=location_card.cget("bg"))
@@ -245,7 +173,7 @@ def build_diagnostics_page(window: object, parent: tk.Widget) -> tk.Frame:
     style_button(tk.Button(button_row, text="工作日志", command=lambda: window.run_action(lambda: window.service.open_log_target("workerLog"))), kind="ghost").pack(side="left", padx=(0, 6))
     style_button(tk.Button(button_row, text="守护日志", command=lambda: window.run_action(lambda: window.service.open_log_target("supervisorLog"))), kind="ghost").pack(side="left", padx=(0, 6))
     style_button(
-        tk.Button(button_row, text="校园网诊断", command=lambda: window.run_action(lambda: window.service.open_log_target("networkMonitorLog"))),
+        tk.Button(button_row, text="网络诊断", command=lambda: window.run_action(lambda: window.service.open_log_target("networkMonitorLog"))),
         kind="ghost",
     ).pack(side="left", padx=(0, 6))
     style_button(

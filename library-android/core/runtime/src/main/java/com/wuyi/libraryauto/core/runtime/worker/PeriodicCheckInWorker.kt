@@ -70,18 +70,14 @@ class PeriodicCheckInWorker(
                 10,
                 TimeUnit.MINUTES,
             )
-                // BUG-CAPTIVE 修复：之前 setRequiredNetworkType(CONNECTED) 在校园网未通过认证
-                // （未 VALIDATED）时会被 WorkManager 视为不满足约束直接不调度，导致后台连不上 portal。
-                // 真实的网络判定改由 [BackgroundNetworkRecoveryCoordinator] 在 doWork 内做，
-                // 这里只保留 LINEAR backoff 兜底。
+                // 不设置 WorkManager 网络约束；业务请求失败后由现有错误处理和 LINEAR backoff 兜底。
                 .setBackoffCriteria(BackoffPolicy.LINEAR, 60, TimeUnit.SECONDS)
                 .build()
 
         internal fun buildRunOnceRequest(source: TriggerSource): OneTimeWorkRequest =
             OneTimeWorkRequestBuilder<PeriodicCheckInWorker>()
                 .setInputData(workDataOf(KEY_TRIGGER_SOURCE to source.name))
-                // BUG-D 修复：与 PeriodicWorkRequest 对齐 LINEAR backoff，避免默认指数退避在
-                // ProcessRestart / NetworkRestored / CampusAuthRecovery 触发时上飙到几小时。
+                // 与 PeriodicWorkRequest 对齐 LINEAR backoff，避免默认指数退避上飙到几小时。
                 .setBackoffCriteria(BackoffPolicy.LINEAR, 60, TimeUnit.SECONDS)
                 .build()
 

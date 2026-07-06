@@ -58,18 +58,6 @@ class AutomationPlanWorker(
                 return Result.success()
             }
 
-            val networkRecovery = dependencies.ensureNetworkForBackgroundWork()
-            if (!networkRecovery.recovered) {
-                persistPlan(
-                    plan = plan,
-                    nowEpochSeconds = nowEpochSeconds,
-                    message = networkRecovery.message,
-                    nextRunAtEpochSeconds = nextRunAtOnFailure,
-                    dependencies = dependencies,
-                )
-                return Result.success()
-            }
-
             val session =
                 runCatching {
                     dependencies.login(account.studentId, account.let { it.password })
@@ -84,18 +72,6 @@ class AutomationPlanWorker(
                     return Result.success()
             }
 
-            val bookedDatesRecovery = dependencies.ensureNetworkForBackgroundWork()
-            if (!bookedDatesRecovery.recovered) {
-                persistPlan(
-                    plan = plan,
-                    nowEpochSeconds = nowEpochSeconds,
-                    message = bookedDatesRecovery.message,
-                    nextRunAtEpochSeconds = nextRunAtOnFailure,
-                    dependencies = dependencies,
-                )
-                return Result.success()
-            }
-
             val bookedDates = dependencies.loadBookedDates(plan, session).toMutableSet()
             val results = mutableListOf<WindowAttemptResult>()
             var hasAttemptedReservationRequest = false
@@ -107,17 +83,6 @@ class AutomationPlanWorker(
                             label = window.label,
                             wasSuccessful = false,
                             message = "该日期已存在预约，已跳过",
-                        )
-                    return@forEach
-                }
-
-                val reservationRecovery = dependencies.ensureNetworkForBackgroundWork()
-                if (!reservationRecovery.recovered) {
-                    results +=
-                        WindowAttemptResult(
-                            label = window.label,
-                            wasSuccessful = false,
-                            message = reservationRecovery.message,
                         )
                     return@forEach
                 }

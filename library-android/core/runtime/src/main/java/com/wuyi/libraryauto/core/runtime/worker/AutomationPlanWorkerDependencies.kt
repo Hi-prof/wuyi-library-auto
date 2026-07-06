@@ -1,8 +1,6 @@
 package com.wuyi.libraryauto.core.runtime.worker
 
 import android.content.Context
-import android.net.ConnectivityManager
-import android.net.wifi.WifiManager
 import com.wuyi.libraryauto.core.domain.usecase.BuildContinuousReservationWindowsUseCase
 import com.wuyi.libraryauto.core.domain.usecase.ReservationWindow
 import com.wuyi.libraryauto.core.network.auth.AuthenticatedSession
@@ -15,12 +13,6 @@ import com.wuyi.libraryauto.core.network.seat.SeatQueryGateway
 import com.wuyi.libraryauto.core.network.seat.SeatReservationGateway
 import com.wuyi.libraryauto.core.network.seat.SeatReservationService
 import com.wuyi.libraryauto.core.network.seat.SearchPageContext
-import com.wuyi.libraryauto.core.runtime.network.ActiveWifiReconnector
-import com.wuyi.libraryauto.core.runtime.network.AndroidWorkerNetworkManager
-import com.wuyi.libraryauto.core.runtime.network.BackgroundNetworkRecoveryCoordinator
-import com.wuyi.libraryauto.core.runtime.network.CaptivePortalRecoveryProvider
-import com.wuyi.libraryauto.core.runtime.network.NetworkRecoveryResult
-import com.wuyi.libraryauto.core.runtime.network.WifiReconnectSettings
 import com.wuyi.libraryauto.core.storage.credentials.SavedAccountStore
 import com.wuyi.libraryauto.core.storage.db.AutomationPlanDao
 import com.wuyi.libraryauto.core.storage.db.AutomationPlanEntity
@@ -29,8 +21,6 @@ import com.wuyi.libraryauto.core.storage.db.ExecutionLogEntity
 import com.wuyi.libraryauto.core.storage.db.ReservationTaskDao
 import com.wuyi.libraryauto.core.storage.db.ReservationTaskEntity
 import com.wuyi.libraryauto.core.storage.db.StorageDatabaseProvider
-import com.wuyi.libraryauto.core.storage.network.WifiReconnectSnapshot
-import com.wuyi.libraryauto.core.storage.network.WifiReconnectStore
 import java.time.Instant
 import java.time.ZoneId
 import kotlinx.coroutines.delay
@@ -47,8 +37,6 @@ internal data class AutomationPlanReservationResult(
 
 internal interface AutomationPlanWorkerDependencies {
     suspend fun findPlan(planId: String): AutomationPlanEntity?
-
-    suspend fun ensureNetworkForBackgroundWork(): NetworkRecoveryResult
 
     fun loadSavedAccount(studentId: String): SavedAccountStore.SavedAccount?
 
@@ -124,23 +112,8 @@ private class StorageAutomationPlanWorkerDependencies(
     private val entryUrls: List<String> = listOf(DEFAULT_ENTRY_URL),
     private val seatServiceOrigins: List<String> = listOf(DEFAULT_SEAT_SERVICE_ORIGIN),
     private val scheduler: AutomationPlanScheduler = AutomationPlanScheduler(appContext),
-    private val wifiReconnectStore: WifiReconnectStore = WifiReconnectStore(appContext),
-    private val networkRecoveryCoordinator: BackgroundNetworkRecoveryCoordinator =
-        BackgroundNetworkRecoveryCoordinator(
-            networkManager = AndroidWorkerNetworkManager(appContext),
-            activeWifiReconnector =
-                ActiveWifiReconnector(
-                    context = appContext,
-                    wifiManager = appContext.getSystemService(Context.WIFI_SERVICE) as WifiManager,
-                    connectivityManager = appContext.getSystemService(ConnectivityManager::class.java),
-                ),
-            captivePortalRunner = CaptivePortalRecoveryProvider.get(appContext),
-        ),
 ) : AutomationPlanWorkerDependencies {
     override suspend fun findPlan(planId: String): AutomationPlanEntity? = automationPlanDao.findById(planId)
-
-    override suspend fun ensureNetworkForBackgroundWork(): NetworkRecoveryResult =
-        networkRecoveryCoordinator.recoverIfNeeded(wifiReconnectStore.loadSnapshot().toRuntimeSettings())
 
     override fun loadSavedAccount(studentId: String): SavedAccountStore.SavedAccount? =
         savedAccountStore.readAll().firstOrNull { account -> account.studentId == studentId }
@@ -365,12 +338,3 @@ private class StorageAutomationPlanWorkerDependencies(
             }.getOrNull()
     }
 }
-
-private fun WifiReconnectSnapshot.toRuntimeSettings(): WifiReconnectSettings =
-    WifiReconnectSettings(
-        enabled = enabled,
-        primaryNetwork = primaryNetwork,
-        candidateNetworks = candidateNetworks,
-        recoveryTimeoutSeconds = recoveryTimeoutSeconds,
-        attemptTimeoutSeconds = attemptTimeoutSeconds,
-    )

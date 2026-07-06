@@ -9,7 +9,6 @@ from typing import Any
 from wuyi_seat_bot.network_monitor import (
     NetworkMonitor,
     build_network_monitor_log_path,
-    discover_campus_login_url,
     load_network_monitor_status,
 )
 from wuyi_seat_bot.service_manager import build_service_log_paths, load_service_status
@@ -64,29 +63,6 @@ class DesktopSettingsService:
         network_status = self.network_monitor.reconnect_once()
         return self.get_payload(message="已尝试网络重连", network_status=network_status)
 
-    def run_campus_network_login(self) -> dict[str, Any]:
-        network_status = self.network_monitor.authenticate_campus_network_once()
-        return self.get_payload(message="已尝试校园网认证", network_status=network_status)
-
-    def refresh_campus_login_url(self) -> dict[str, Any]:
-        settings = load_app_settings(self.config_path)
-        login_url = discover_campus_login_url(self.config_path, settings["campusNetwork"])
-        save_app_settings(
-            self.config_path,
-            {
-                **settings,
-                "campusNetwork": {
-                    **settings["campusNetwork"],
-                    "loginUrl": login_url,
-                },
-            },
-        )
-        return self.get_payload(message="已获取校园网登录地址")
-
-    def run_switch_to_campus_wifi(self) -> dict[str, Any]:
-        network_status = self.network_monitor.switch_to_campus_wifi_once()
-        return self.get_payload(message="已尝试切换到校园网", network_status=network_status)
-
     def set_stability_enhancement(self, enabled: bool) -> dict[str, Any]:
         message = self.stability_manager.enable() if enabled else self.stability_manager.disable()
         return self.get_payload(message=message)
@@ -114,7 +90,7 @@ class DesktopSettingsService:
         target_label = {
             "workerLog": "工作日志",
             "supervisorLog": "守护日志",
-            "networkMonitorLog": "校园网诊断",
+            "networkMonitorLog": "网络诊断",
         }[target]
         return self.get_payload(message=f"已打开{target_label}")
 
@@ -160,7 +136,7 @@ class DesktopSettingsService:
         sections = (
             self._build_log_section("工作日志", self.worker_log_path),
             self._build_log_section("守护日志", self.supervisor_log_path),
-            self._build_log_section("校园网诊断", self.network_monitor_log_path),
+            self._build_log_section("网络诊断", self.network_monitor_log_path),
         )
         return "\n\n".join(sections)
 

@@ -281,13 +281,6 @@ class SeatWebApp:
             service_snapshot=self.get_service_snapshot(),
         )
 
-    def run_campus_network_login(self) -> dict[str, Any]:
-        return build_network_settings_response(
-            config_path=self.config_path,
-            network_status=self._get_network_monitor().authenticate_campus_network_once(),
-            service_snapshot=self.get_service_snapshot(),
-        )
-
     def update_stability_enhancement(self, payload: dict[str, Any]) -> dict[str, Any]:
         return update_stability_enhancement_response(
             config_path=self.config_path,

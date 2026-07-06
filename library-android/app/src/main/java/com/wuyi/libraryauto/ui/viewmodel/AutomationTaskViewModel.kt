@@ -9,14 +9,17 @@ import com.wuyi.libraryauto.core.domain.usecase.BuildContinuousReservationWindow
 import com.wuyi.libraryauto.ui.repository.seat.SeatLookupLoadResult
 import com.wuyi.libraryauto.ui.repository.seat.SeatLookupRepository
 import com.wuyi.libraryauto.ui.repository.seat.SeatRoomSnapshot
+import com.wuyi.libraryauto.ui.repository.seat.SmartSeatRecommender
 import com.wuyi.libraryauto.ui.repository.settings.AutofillAuditLevel
 import com.wuyi.libraryauto.ui.repository.settings.DiagnosticsLogRepository
 import com.wuyi.libraryauto.ui.repository.task.AccountReservationHistoryReader
+import com.wuyi.libraryauto.ui.repository.task.AccountSeatActionExecutor
 import com.wuyi.libraryauto.ui.repository.task.AutomationPlanDraft
 import com.wuyi.libraryauto.ui.repository.task.AutomationPlanRecord
 import com.wuyi.libraryauto.ui.repository.task.AutomationPlanRepository
 import com.wuyi.libraryauto.ui.repository.task.AutomationTaskMode
 import com.wuyi.libraryauto.ui.repository.task.HistorySource
+import com.wuyi.libraryauto.ui.repository.task.SeatBookingSnapshotView
 import com.wuyi.libraryauto.ui.repository.session.SessionRepository
 import java.time.Clock
 import java.time.LocalDateTime
@@ -35,6 +38,8 @@ class AutomationTaskViewModel(
     initialStudentFilter: String = "",
     private val historyReader: AccountReservationHistoryReader,
     private val diagnosticsLogRepository: DiagnosticsLogRepository,
+    private val smartSeatRecommender: SmartSeatRecommender? = null,
+    private val accountSeatActionExecutor: AccountSeatActionExecutor? = null,
 ) : ViewModel() {
 
     var uiState by mutableStateOf(
@@ -46,6 +51,8 @@ class AutomationTaskViewModel(
         private set
 
     private var allPlans: List<AutomationPlanRecord> = emptyList()
+    private var reservationChecks: Map<String, AutomationTaskReservationCheckUiState> = emptyMap()
+    private var createFromBookingsRequestId = 0
 
     init {
         observePlans()
@@ -58,7 +65,7 @@ class AutomationTaskViewModel(
     fun updateStudentFilter(studentId: String) {
         uiState = uiState.copy(
             studentFilter = studentId.trim(),
-            plans = filterAutomationPlans(allPlans, studentId),
+            plans = filterAutomationPlans(allPlans, studentId, reservationChecks),
         )
     }
 
@@ -170,31 +177,50 @@ class AutomationTaskViewModel(
                 if (currentDialog.lastAutofill != null) return@launch
                 if (resolvePlanForStudent(safeStudentId) != null) return@launch
 
-                val firstHit = history.firstOrNull()
-                if (firstHit == null) {
-                    // 即使不命中也把全量 history（此处为 emptyList）暴露给 UI 下拉与"曾用"标记。
+                if (history.isEmpty()) {
                     uiState =
                         uiState.copy(
                             dialog = currentDialog.copy(historyHints = history),
                         )
                     return@launch
                 }
+
+                val recommendation = smartSeatRecommender?.let { recommender ->
+                    SmartSeatRecommender.analyzeHistory(history)
+                } ?: history.firstOrNull()?.let { firstHit ->
+                    com.wuyi.libraryauto.ui.repository.seat.SeatRecommendation(
+                        roomName = firstHit.roomName,
+                        seatNumber = firstHit.seatNumber,
+                        confidence = 1.0,
+                        usageCount = 1,
+                        latestUsedTimestamp = firstHit.timestampEpochSeconds,
+                    )
+                }
+
+                if (recommendation == null) {
+                    uiState =
+                        uiState.copy(
+                            dialog = currentDialog.copy(historyHints = history),
+                        )
+                    return@launch
+                }
+
                 uiState =
                     uiState.copy(
                         dialog =
                             currentDialog.copy(
-                                roomName = firstHit.roomName,
-                                seatNumber = firstHit.seatNumber,
-                                lastAutofill = AutoFillSnapshot(firstHit.roomName, firstHit.seatNumber),
+                                roomName = recommendation.roomName,
+                                seatNumber = recommendation.seatNumber,
+                                lastAutofill = AutoFillSnapshot(recommendation.roomName, recommendation.seatNumber),
                                 historyHints = history,
                                 dialogMessage = null,
                             ),
                     )
                 diagnosticsLogRepository.recordAutomationAutofill(
                     studentId = safeStudentId,
-                    source = firstHit.source.toAuditTag(),
-                    roomName = firstHit.roomName,
-                    seatNumber = firstHit.seatNumber,
+                    source = "smart_recommendation",
+                    roomName = recommendation.roomName,
+                    seatNumber = recommendation.seatNumber,
                     level = AutofillAuditLevel.INFO,
                 )
             }
@@ -316,11 +342,210 @@ class AutomationTaskViewModel(
         }
     }
 
+    fun checkReservationsForPlans() {
+        val executor = accountSeatActionExecutor
+        if (executor == null) {
+            uiState = uiState.copy(statusMessage = "当前版本未配置预约检查入口")
+            return
+        }
+        val visiblePlanIds = uiState.plans.map { plan -> plan.planId }.toSet()
+        val plansToCheck =
+            allPlans.filter { plan -> plan.planId in visiblePlanIds }
+        if (plansToCheck.isEmpty()) {
+            uiState = uiState.copy(statusMessage = "暂无自动任务可检查")
+            return
+        }
+        val checkingState =
+            plansToCheck.associate { plan ->
+                plan.planId to
+                    AutomationTaskReservationCheckUiState(
+                        status = AutomationTaskReservationCheckStatus.CHECKING,
+                        label = "检查中",
+                    )
+            }
+        reservationChecks = reservationChecks + checkingState
+        uiState =
+            uiState.copy(
+                isCheckingReservations = true,
+                statusMessage = "正在检查自动任务对应账号的预约状态",
+                plans = filterAutomationPlans(allPlans, uiState.studentFilter, reservationChecks),
+            )
+
+        viewModelScope.launch {
+            val results = linkedMapOf<String, AutomationTaskReservationCheckUiState>()
+            for (plan in plansToCheck) {
+                results[plan.planId] = checkPlanReservation(plan, executor)
+                reservationChecks = reservationChecks + results
+                uiState =
+                    uiState.copy(
+                        plans = filterAutomationPlans(allPlans, uiState.studentFilter, reservationChecks),
+                    )
+            }
+            uiState =
+                uiState.copy(
+                    isCheckingReservations = false,
+                    statusMessage = buildReservationCheckSummary(results.values),
+                    plans = filterAutomationPlans(allPlans, uiState.studentFilter, reservationChecks),
+                )
+        }
+    }
+
+    fun openCreateFromBookingsDialog() {
+        createFromBookingsRequestId += 1
+        val requestId = createFromBookingsRequestId
+        val executor = accountSeatActionExecutor
+        if (executor == null) {
+            uiState =
+                uiState.copy(
+                    createFromBookingsDialog = CreateFromBookingsDialogState(),
+                    statusMessage = "当前版本未配置预约读取入口，无法根据当前预约创建自动任务",
+                )
+            return
+        }
+        val accounts = uiState.accounts.ifEmpty { buildAccounts() }
+        if (accounts.isEmpty()) {
+            uiState =
+                uiState.copy(
+                    createFromBookingsDialog = CreateFromBookingsDialogState(),
+                    statusMessage = "还没有可用账号，无法根据当前预约创建自动任务",
+                )
+            return
+        }
+        uiState =
+            uiState.copy(
+                createFromBookingsDialog =
+                    CreateFromBookingsDialogState(
+                        visible = true,
+                        loading = true,
+                        message = "正在读取当前预约...",
+                    ),
+                statusMessage = null,
+            )
+        viewModelScope.launch {
+            val rows =
+                accounts
+                    .map { account -> buildCreateFromBookingsRow(account.studentId, executor) }
+                    .sortedWith(
+                        compareBy<CreateFromBookingsRowUiState> { it.hasExistingPlan }
+                            .thenByDescending { it.canCreate }
+                            .thenBy { it.studentId },
+                    )
+            if (requestId != createFromBookingsRequestId || !uiState.createFromBookingsDialog.visible) {
+                return@launch
+            }
+            uiState =
+                uiState.copy(
+                    createFromBookingsDialog =
+                        CreateFromBookingsDialogState(
+                            visible = true,
+                            rows = rows,
+                            message =
+                                if (rows.none { it.canCreate }) {
+                                    "没有读取到可用于创建自动任务的当前预约"
+                                } else {
+                                    "已读取 ${rows.count { it.canCreate }} 个可创建账号"
+                                },
+                        ),
+                )
+        }
+    }
+
+    fun closeCreateFromBookingsDialog() {
+        createFromBookingsRequestId += 1
+        uiState = uiState.copy(createFromBookingsDialog = CreateFromBookingsDialogState())
+    }
+
+    fun toggleCreateFromBookingsRow(studentId: String) {
+        val safeStudentId = studentId.trim()
+        if (safeStudentId.isBlank()) return
+        val dialog = uiState.createFromBookingsDialog
+        uiState =
+            uiState.copy(
+                createFromBookingsDialog =
+                    dialog.copy(
+                        rows =
+                            dialog.rows.map { row ->
+                                if (row.studentId == safeStudentId && row.canCreate) {
+                                    row.copy(selected = !row.selected)
+                                } else {
+                                    row
+                                }
+                            },
+                        message = null,
+                    ),
+            )
+    }
+
+    fun selectAllCreateFromBookingsRows() {
+        val dialog = uiState.createFromBookingsDialog
+        uiState =
+            uiState.copy(
+                createFromBookingsDialog =
+                    dialog.copy(
+                        rows = dialog.rows.map { row -> if (row.canCreate) row.copy(selected = true) else row },
+                        message = null,
+                    ),
+            )
+    }
+
+    fun clearCreateFromBookingsRows() {
+        val dialog = uiState.createFromBookingsDialog
+        uiState =
+            uiState.copy(
+                createFromBookingsDialog =
+                    dialog.copy(
+                        rows = dialog.rows.map { row -> row.copy(selected = false) },
+                        message = null,
+                    ),
+            )
+    }
+
+    fun confirmCreateFromBookings() {
+        val dialog = uiState.createFromBookingsDialog
+        val selectedRows = dialog.rows.filter { row -> row.selected && row.canCreate }
+        if (selectedRows.isEmpty()) {
+            uiState =
+                uiState.copy(
+                    createFromBookingsDialog = dialog.copy(message = "请选择要创建自动任务的账号"),
+                )
+            return
+        }
+        uiState = uiState.copy(createFromBookingsDialog = dialog.copy(saving = true, message = null))
+        viewModelScope.launch {
+            var success = 0
+            var failed = 0
+            for (row in selectedRows) {
+                try {
+                    automationPlanRepository.savePlan(
+                        AutomationPlanDraft(
+                            studentId = row.studentId,
+                            roomName = row.roomName,
+                            seatNumber = row.seatNumber,
+                            mode = AutomationTaskMode.CONTINUOUS,
+                        ),
+                    )
+                    success += 1
+                } catch (cancellation: CancellationException) {
+                    throw cancellation
+                } catch (_: Throwable) {
+                    failed += 1
+                }
+            }
+            refreshAccounts()
+            uiState =
+                uiState.copy(
+                    createFromBookingsDialog = CreateFromBookingsDialogState(),
+                    statusMessage = "创建自动任务完成：成功 $success 个，失败 $failed 个",
+                )
+        }
+    }
+
     private fun observePlans() {
         viewModelScope.launch {
             automationPlanRepository.observePlans().collect { plans ->
                 allPlans = plans
-                uiState = uiState.copy(plans = filterAutomationPlans(plans, uiState.studentFilter))
+                reservationChecks = reservationChecks.filterKeys { planId -> plans.any { plan -> plan.planId == planId } }
+                uiState = uiState.copy(plans = filterAutomationPlans(plans, uiState.studentFilter, reservationChecks))
             }
         }
     }
@@ -414,6 +639,47 @@ class AutomationTaskViewModel(
     private fun resolvePlanForStudent(studentId: String): AutomationPlanRecord? =
         allPlans.firstOrNull { it.studentId == studentId.trim() }
 
+    private suspend fun buildCreateFromBookingsRow(
+        studentId: String,
+        executor: AccountSeatActionExecutor,
+    ): CreateFromBookingsRowUiState {
+        val safeStudentId = studentId.trim()
+        val hasExistingPlan = allPlans.any { plan -> plan.studentId == safeStudentId }
+        return try {
+            val booking =
+                executor.loadActiveBookings(safeStudentId)
+                    .firstOrNull { booking ->
+                        booking.roomName.isNotBlank() && booking.seatNumber.isNotBlank()
+                    }
+            if (booking == null) {
+                CreateFromBookingsRowUiState(
+                    studentId = safeStudentId,
+                    hasExistingPlan = hasExistingPlan,
+                    message = "当前没有可用预约",
+                )
+            } else {
+                CreateFromBookingsRowUiState(
+                    studentId = safeStudentId,
+                    roomName = booking.roomName.trim(),
+                    seatNumber = booking.seatNumber.trim(),
+                    beginLabel = booking.beginLabel,
+                    statusLabel = booking.statusLabel,
+                    hasExistingPlan = hasExistingPlan,
+                    selected = !hasExistingPlan,
+                    canCreate = true,
+                )
+            }
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (error: Throwable) {
+            CreateFromBookingsRowUiState(
+                studentId = safeStudentId,
+                hasExistingPlan = hasExistingPlan,
+                message = error.message?.takeIf(String::isNotBlank) ?: "读取当前预约失败",
+            )
+        }
+    }
+
     private fun buildContinuousPreview(): String {
         val now = LocalDateTime.now(clock)
         val windows = buildContinuousReservationWindowsUseCase(now)
@@ -483,6 +749,62 @@ class AutomationTaskViewModel(
             singleStartTime = dialog.customStartTime.ifBlank { null },
             singleEndTime = dialog.customEndTime.ifBlank { null },
         )
+    }
+
+    private suspend fun checkPlanReservation(
+        plan: AutomationPlanRecord,
+        executor: AccountSeatActionExecutor,
+    ): AutomationTaskReservationCheckUiState =
+        try {
+            val bookings = executor.loadActiveBookings(plan.studentId)
+            if (bookings.isEmpty()) {
+                AutomationTaskReservationCheckUiState(
+                    status = AutomationTaskReservationCheckStatus.EMPTY,
+                    label = "暂无预约",
+                    detail = "该账号当前没有活跃预约",
+                )
+            } else {
+                val matching =
+                    bookings.firstOrNull { booking ->
+                        booking.roomName.trim() == plan.roomName.trim() &&
+                            booking.seatNumber.trim() == plan.seatNumber.trim()
+                    }
+                if (matching != null) {
+                    AutomationTaskReservationCheckUiState(
+                        status = AutomationTaskReservationCheckStatus.MATCHED,
+                        label = "目标已预约",
+                        detail = matching.toReservationCheckLabel(),
+                    )
+                } else {
+                    AutomationTaskReservationCheckUiState(
+                        status = AutomationTaskReservationCheckStatus.OTHER_BOOKING,
+                        label = "已有其它预约",
+                        detail = bookings.joinToString("；") { booking -> booking.toReservationCheckLabel() },
+                    )
+                }
+            }
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (error: Throwable) {
+            AutomationTaskReservationCheckUiState(
+                status = AutomationTaskReservationCheckStatus.FAILED,
+                label = "检查失败",
+                detail = error.message?.takeIf(String::isNotBlank) ?: error::class.simpleName.orEmpty(),
+            )
+        }
+
+    private fun SeatBookingSnapshotView.toReservationCheckLabel(): String =
+        listOf(roomName, seatNumber, beginLabel, statusLabel)
+            .filter(String::isNotBlank)
+            .joinToString(" / ")
+            .ifBlank { bookingId ?: "已预约" }
+
+    private fun buildReservationCheckSummary(results: Collection<AutomationTaskReservationCheckUiState>): String {
+        val matched = results.count { it.status == AutomationTaskReservationCheckStatus.MATCHED }
+        val other = results.count { it.status == AutomationTaskReservationCheckStatus.OTHER_BOOKING }
+        val empty = results.count { it.status == AutomationTaskReservationCheckStatus.EMPTY }
+        val failed = results.count { it.status == AutomationTaskReservationCheckStatus.FAILED }
+        return "预约检查完成：目标已预约 $matched 个，已有其它预约 $other 个，暂无预约 $empty 个，失败 $failed 个"
     }
 }
 

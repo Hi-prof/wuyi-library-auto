@@ -1,3 +1,10 @@
 data/
 runtime/
 __pycache__/
+
+# Node
+node_modules/
+package-lock.json
+
+# Generated CSS
+src/prevent_auto/web/static/css/main.css

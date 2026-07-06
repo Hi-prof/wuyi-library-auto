@@ -167,19 +167,9 @@ class NetworkMonitor:
             )
 
         settings = self.load_settings()
-        campus_network = settings["campusNetwork"]
-
-        authenticated_status = self._authenticate_after_detection(
-            current_status,
-            campus_network=campus_network,
-            wifi_name="",
-        )
-        if authenticated_status is not None:
-            return authenticated_status
-
         preferred_wifi_names = settings["networkMonitoring"]["preferredWifiNames"]
         candidates = _build_wifi_candidates(
-            _build_wifi_preferences(preferred_wifi_names, campus_network.get("wifiName", "")),
+            preferred_wifi_names,
             list_saved_wifi_profiles(),
         )
         if not candidates:
@@ -206,14 +196,6 @@ class NetworkMonitor:
                         "message": f"已通过 {wifi_name} 恢复联网",
                     }
                 )
-
-            authenticated_status = self._authenticate_after_detection(
-                detection,
-                campus_network=campus_network,
-                wifi_name=wifi_name,
-            )
-            if authenticated_status is not None:
-                return authenticated_status
 
         return self._save_status(
             {

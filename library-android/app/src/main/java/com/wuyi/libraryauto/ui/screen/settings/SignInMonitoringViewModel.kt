@@ -43,9 +43,9 @@ class SignInMonitoringViewModel(
                 if (loadedWithinPlaceholderWindow != null) {
                     loadedWithinPlaceholderWindow
                 } else {
-                uiState = uiState.copy(showPlaceholder = true)
+                    uiState = uiState.copy(showPlaceholder = true)
                     snapshot.await()
-            }
+                }
             uiState =
                 SignInMonitoringUiState(
                     isLoading = false,

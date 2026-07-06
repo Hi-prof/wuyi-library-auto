@@ -16,6 +16,28 @@ from prevent_auto.services.account_service import AccountService
 from prevent_auto.settings import PreventAutoSettings
 from prevent_auto.web.app import create_app
 from prevent_auto.web.runtime import AUTO_RESERVATION_DETAILED_LOG_KEY
+from prevent_auto.web.runtime import build_dashboard_health
+
+
+def _health_snapshot(
+    *,
+    account_id: int = 1,
+    student_id: str = "20231121130",
+    name: str = "主号",
+    current_status: str = "状态检测：正常",
+    last_check_label: str = "2026年07月05日08时10分00秒",
+    checked_in: bool = False,
+    not_reserved: bool = False,
+) -> dict[str, object]:
+    return {
+        "id": account_id,
+        "name": name,
+        "studentId": student_id,
+        "currentStatus": current_status,
+        "lastCheckLabel": last_check_label,
+        "isCheckedInToday": checked_in,
+        "isNotReservedToday": not_reserved,
+    }
 
 
 class WebAppTestCase(unittest.TestCase):
@@ -134,6 +156,118 @@ class WebAppTestCase(unittest.TestCase):
         self.assertIn("自习室预约分布", response.text)
         self.assertIn("mobile.css", response.text)
 
+    def test_dashboard_page_renders_health_sections_before_seat_distribution(self) -> None:
+        self.login()
+
+        response = self.client.get("/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("运行状态", response.text)
+        self.assertIn("待处理事项", response.text)
+        self.assertIn("尚未检测", response.text)
+        self.assertLess(
+            response.text.index("运行状态"),
+            response.text.index("自习室预约分布"),
+        )
+
+    def test_dashboard_attention_item_includes_recommended_actions(self) -> None:
+        with connect_database(self.database_path) as connection:
+            connection.execute(
+                """
+                UPDATE accounts
+                SET last_check_at = '2026-07-05T08:10:00+08:00',
+                    last_status = '刷新登录失败：账号密码错误'
+                WHERE id = 1
+                """
+            )
+        self.login()
+
+        response = self.client.get("/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("登录态异常", response.text)
+        self.assertIn("刷新登录态", response.text)
+        self.assertIn("/accounts/1/refresh-login", response.text)
+        self.assertIn("查看详情", response.text)
+
+    def test_dashboard_health_reports_normal_state(self) -> None:
+        health = build_dashboard_health(
+            {
+                "accountCount": 1,
+                "checkedInTodayCount": 1,
+                "notReservedTodayCount": 0,
+                "accountSnapshots": [
+                    _health_snapshot(checked_in=True),
+                ],
+            }
+        )
+
+        self.assertEqual(health["overallState"], "healthy")
+        self.assertEqual(health["overallLabel"], "运行正常")
+        self.assertEqual(health["counters"]["attentionCount"], 0)
+        self.assertEqual(health["attentionItems"], [])
+
+    def test_dashboard_health_prioritizes_login_issue(self) -> None:
+        health = build_dashboard_health(
+            {
+                "accountCount": 1,
+                "checkedInTodayCount": 0,
+                "notReservedTodayCount": 0,
+                "accountSnapshots": [
+                    _health_snapshot(
+                        current_status="刷新登录失败：账号密码错误",
+                        not_reserved=True,
+                    ),
+                ],
+            }
+        )
+
+        self.assertEqual(health["overallState"], "attention")
+        self.assertEqual(health["counters"]["loginIssueCount"], 1)
+        self.assertEqual(health["attentionItems"][0]["issueType"], "login")
+        self.assertEqual(health["attentionItems"][0]["issueLabel"], "登录态异常")
+        self.assertIn("刷新登录态", health["attentionItems"][0]["recommendedActions"])
+
+    def test_dashboard_health_reports_not_reserved_account(self) -> None:
+        health = build_dashboard_health(
+            {
+                "accountCount": 1,
+                "checkedInTodayCount": 0,
+                "notReservedTodayCount": 1,
+                "accountSnapshots": [
+                    _health_snapshot(
+                        current_status="今日无预约",
+                        not_reserved=True,
+                    ),
+                ],
+            }
+        )
+
+        self.assertEqual(health["overallState"], "attention")
+        self.assertEqual(health["attentionItems"][0]["issueType"], "not_reserved")
+        self.assertEqual(health["attentionItems"][0]["issueLabel"], "未预约")
+        self.assertIn("立即检测", health["attentionItems"][0]["recommendedActions"])
+
+    def test_dashboard_health_reports_unchecked_account(self) -> None:
+        health = build_dashboard_health(
+            {
+                "accountCount": 1,
+                "checkedInTodayCount": 0,
+                "notReservedTodayCount": 0,
+                "accountSnapshots": [
+                    _health_snapshot(
+                        current_status="尚未检测",
+                        last_check_label="尚未检测",
+                    ),
+                ],
+            }
+        )
+
+        self.assertEqual(health["overallState"], "unchecked")
+        self.assertEqual(health["counters"]["uncheckedCount"], 1)
+        self.assertEqual(health["attentionItems"][0]["issueType"], "unchecked")
+        self.assertEqual(health["attentionItems"][0]["issueLabel"], "尚未检测")
+
     def test_dashboard_summary_counts_checked_in_and_not_reserved_accounts(self) -> None:
         self.login()
         account_service = self.client.app.state.services.account_service
@@ -216,7 +350,7 @@ class WebAppTestCase(unittest.TestCase):
         self.assertNotIn("<dt>目标座位</dt>", response.text)
         self.assertNotIn("查看账号详情", response.text)
 
-    def test_dashboard_no_longer_renders_per_account_check_now_button(
+    def test_dashboard_attention_item_includes_check_now_action_for_unchecked_account(
         self,
     ) -> None:
         self.login()
@@ -224,8 +358,9 @@ class WebAppTestCase(unittest.TestCase):
         response = self.client.get("/")
 
         self.assertEqual(response.status_code, 200)
-        self.assertNotIn('action="/accounts/1/check-now"', response.text)
-        self.assertNotIn('class="account-overview-refresh-button"', response.text)
+        self.assertIn('action="/accounts/1/check-now"', response.text)
+        self.assertIn("立即检测", response.text)
+        self.assertIn("查看详情", response.text)
 
     def test_dashboard_page_links_to_account_management(self) -> None:
         self.login()
@@ -1332,3 +1467,158 @@ class WebAppTestCase(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn("/automation-tasks/bulk-soft-delete", response.text)
         self.assertIn("批量删除", response.text)
+
+
+class DashboardHealthRegressionTestCase(unittest.TestCase):
+    def _build_client(self, database_path: Path, *, seed_account: bool) -> TestClient:
+        if seed_account:
+            account_service = AccountService(database_path)
+            account_service.create_account(
+                name="primary",
+                student_id="20231121130",
+                password="secret",
+                login_url="https://wuyiu.huitu.zhishulib.com/#!/Space/Category/list",
+                seat_url="https://wuyiu.huitu.zhishulib.com/#!/Space/Category/list",
+                enabled=True,
+            )
+            with connect_database(database_path) as connection:
+                connection.execute(
+                    """
+                    UPDATE accounts
+                    SET pool_status = 'active',
+                        pool_updated_at = '2026-04-03T00:00:00Z',
+                        pool_previous = ''
+                    WHERE id = 1
+                    """
+                )
+        settings = PreventAutoSettings(
+            project_root=Path.cwd(),
+            package_root=Path(__file__).resolve().parents[1],
+            data_dir=database_path.parent,
+            runtime_dir=database_path.parent / "runtime",
+            database_path=database_path,
+            host="127.0.0.1",
+            port=8080,
+            monitor_interval_seconds=1500,
+            rebook_poll_interval_seconds=15,
+            log_retention_days=30,
+        )
+        return TestClient(create_app(settings, start_background_workers=False))
+
+    def _login(self, client: TestClient) -> None:
+        settings = client.app.state.settings
+        response = client.post(
+            "/login",
+            data={
+                "username": settings.auth_username,
+                "password": settings.auth_password,
+                "next": "/",
+            },
+            follow_redirects=False,
+        )
+        self.assertEqual(response.status_code, 303)
+
+    def _write_login_state(self, database_path: Path, filename: str) -> Path:
+        state_path = database_path.parent / "runtime" / filename
+        state_path.parent.mkdir(parents=True, exist_ok=True)
+        state_path.write_text(
+            '{"cookies":[{"name":"SESSION","value":"test"}],"origins":[]}',
+            encoding="utf-8",
+        )
+        return state_path
+
+    def test_dashboard_health_mixed_checked_and_unchecked_requires_attention(self) -> None:
+        health = build_dashboard_health(
+            {
+                "accountCount": 2,
+                "checkedInTodayCount": 1,
+                "notReservedTodayCount": 0,
+                "accountSnapshots": [
+                    _health_snapshot(account_id=1, checked_in=True),
+                    _health_snapshot(
+                        account_id=2,
+                        current_status="",
+                        last_check_label="",
+                    ),
+                ],
+            }
+        )
+
+        self.assertEqual(health["overallState"], "attention")
+        self.assertEqual(health["counters"]["uncheckedCount"], 1)
+        self.assertEqual(len(health["attentionItems"]), 1)
+        self.assertEqual(health["attentionItems"][0]["issueType"], "unchecked")
+
+    def test_dashboard_page_renders_no_account_empty_state(self) -> None:
+        temp_dir = Path(tempfile.mkdtemp())
+        database_path = temp_dir / "prevent_auto.db"
+        initialize_database(database_path)
+        client = self._build_client(database_path, seed_account=False)
+        self._login(client)
+
+        response = client.get("/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("当前还没有账号，先到号池管理新增账号。", response.text)
+        self.assertNotIn(
+            "账号还没有形成完整检测结果",
+            response.text,
+        )
+
+    def test_dashboard_action_forms_include_return_to_home(self) -> None:
+        temp_dir = Path(tempfile.mkdtemp())
+        database_path = temp_dir / "prevent_auto.db"
+        initialize_database(database_path)
+        client = self._build_client(database_path, seed_account=True)
+        self._login(client)
+        client.app.state.services.account_service.create_account(
+            name="unchecked",
+            student_id="20231121131",
+            password="secret",
+            login_url="https://wuyiu.huitu.zhishulib.com/#!/Space/Category/list",
+            seat_url="https://wuyiu.huitu.zhishulib.com/#!/Space/Category/list",
+            enabled=True,
+        )
+        client.app.state.services.account_service.update_status(
+            1,
+            last_check_at="2026-07-05T08:10:00+08:00",
+            last_status="刷新登录失败：账号密码错误",
+        )
+
+        response = client.get("/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertRegex(
+            response.text,
+            r'<form method="post" action="/accounts/2/check-now">\s*'
+            r'<input type="hidden" name="return_to" value="/">',
+        )
+        self.assertRegex(
+            response.text,
+            r'<form method="post" action="/accounts/1/refresh-login">\s*'
+            r'<input type="hidden" name="return_to" value="/">',
+        )
+
+    def test_refresh_login_redirects_back_to_dashboard_when_requested(self) -> None:
+        temp_dir = Path(tempfile.mkdtemp())
+        database_path = temp_dir / "prevent_auto.db"
+        initialize_database(database_path)
+        client = self._build_client(database_path, seed_account=True)
+        self._login(client)
+
+        with patch.object(
+            client.app.state.services.bridge,
+            "refresh_login",
+            return_value=self._write_login_state(
+                database_path,
+                "auth-20231121130.json",
+            ),
+        ):
+            response = client.post(
+                "/accounts/1/refresh-login",
+                data={"return_to": "/"},
+                follow_redirects=False,
+            )
+
+        self.assertEqual(response.status_code, 303)
+        self.assertTrue(response.headers["location"].startswith("/?notice="))

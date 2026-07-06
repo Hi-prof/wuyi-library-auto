@@ -72,6 +72,7 @@ from prevent_auto.web.middleware import (
 )
 from prevent_auto.web.runtime import (
     AUTO_RESERVATION_DETAILED_LOG_KEY,
+    build_dashboard_health,
     build_dashboard_summary,
     build_services,
     _format_iso_datetime,
@@ -243,6 +244,7 @@ def create_app(
     def dashboard(request: Request, notice: str = "") -> HTMLResponse:
         services = app.state.services
         summary = build_dashboard_summary(services, settings=settings)
+        dashboard_health = build_dashboard_health(summary)
         all_accounts = services.account_service.list_accounts()
         # 仪表盘的「自习室预约分布」直接读 booking_snapshots 缓存表，与号池管理
         # 活跃池 Tab 一致，避免每次打开都去打学校接口造成卡顿。
@@ -271,6 +273,7 @@ def create_app(
                 "request": request,
                 "page_title": "仪表盘",
                 "summary": summary,
+                "dashboard_health": dashboard_health,
                 "seat_display": seat_display,
                 "accounts": all_accounts,
                 "notice_message": _normalize_notice(notice),
@@ -845,9 +848,12 @@ def create_app(
         )
 
     @app.post("/accounts/{account_id}/refresh-login")
-    def refresh_login(account_id: int) -> RedirectResponse:
+    def refresh_login(
+        account_id: int,
+        return_to: str = Form(default="/accounts"),
+    ) -> RedirectResponse:
         status_message = _refresh_account_login_state(app.state.services, account_id)
-        return _redirect_with_notice("/accounts", status_message)
+        return _redirect_with_notice(_normalize_next_path(return_to), status_message)
 
     @app.post("/accounts/{account_id}/cancel-current")
     def cancel_current_booking(account_id: int) -> RedirectResponse:

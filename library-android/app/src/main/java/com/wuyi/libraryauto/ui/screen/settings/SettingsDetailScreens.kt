@@ -7,19 +7,13 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ColumnScope
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Switch
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -29,14 +23,19 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import com.wuyi.libraryauto.BuildConfig
 import com.wuyi.libraryauto.accessibility.WuyiAccessibilityService
+import com.wuyi.libraryauto.ui.components.StatusBadge
+import com.wuyi.libraryauto.ui.components.StatusTone
+import com.wuyi.libraryauto.ui.permission.CapabilityStatus
 import com.wuyi.libraryauto.ui.permission.applicationDetailsSettingsIntent
 import com.wuyi.libraryauto.ui.permission.areNotificationsEnabled
 import com.wuyi.libraryauto.ui.permission.buildCapabilityStatuses
@@ -51,149 +50,88 @@ import com.wuyi.libraryauto.ui.permission.requestScheduleExactAlarmIntent
 import com.wuyi.libraryauto.ui.repository.settings.DiagnosticsLogEntry
 import com.wuyi.libraryauto.ui.repository.settings.DiagnosticsLogRepository
 import com.wuyi.libraryauto.ui.repository.settings.DiagnosticsLogSnapshot
-import com.wuyi.libraryauto.core.storage.network.WifiReconnectNetwork
-import com.wuyi.libraryauto.core.storage.network.WifiReconnectSnapshot
-import com.wuyi.libraryauto.core.storage.network.WifiReconnectStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 @Composable
 fun BuildInfoScreen() {
-    SettingsPageColumn {
+    SettingsLazyColumn {
         item {
-            SettingsSectionCard(
+            SettingsHeroCard(
                 title = "构建信息",
-                body = "用来确认手机当前运行的是不是最新安装包。",
+                body = "确认手机当前运行的安装包版本、构建号和发布时间标记。",
+                badge = BuildConfig.VERSION_NAME,
+            )
+        }
+        item {
+            SettingsCard(
+                title = "安装包详情",
+                body = "遇到兼容、同步或运行问题时先核对这些信息。",
             ) {
-                InfoText("versionName: ${BuildConfig.VERSION_NAME}")
-                InfoText("versionCode: ${BuildConfig.VERSION_CODE}")
-                InfoText("build: ${BuildConfig.BUILD_MARKER}")
+                listOf(
+                    buildBuildInfoRowPresentation("versionName", BuildConfig.VERSION_NAME),
+                    buildBuildInfoRowPresentation("versionCode", BuildConfig.VERSION_CODE.toString()),
+                    buildBuildInfoRowPresentation("build", BuildConfig.BUILD_MARKER),
+                ).forEach { row ->
+                    BuildInfoRow(row)
+                }
             }
         }
     }
 }
 
 @Composable
-fun WifiReconnectSettingsScreen() {
-    val context = LocalContext.current
-    val store = remember(context) { WifiReconnectStore(context.applicationContext) }
-    val suggestionRegistrar = remember(context) { WifiReconnectSuggestionRegistrar(context.applicationContext) }
-    var refreshSignal by rememberSaveable { mutableIntStateOf(0) }
-    var enabled by rememberSaveable { mutableStateOf(false) }
-    var primarySsid by rememberSaveable { mutableStateOf("") }
-    var primaryPassphrase by rememberSaveable { mutableStateOf("") }
-    var candidateLines by rememberSaveable { mutableStateOf("") }
-    var statusMessage by remember { mutableStateOf<String?>(null) }
-
-    LaunchedEffect(store, refreshSignal) {
-        val snapshot = store.loadSnapshot()
-        enabled = snapshot.enabled
-        primarySsid = snapshot.primaryNetwork?.ssid.orEmpty()
-        primaryPassphrase = snapshot.primaryNetwork?.let(WifiReconnectNetwork::password).orEmpty()
-        candidateLines =
-            snapshot.candidateNetworks.joinToString("\n") { network ->
-                "${network.ssid}|${network.password}"
-            }
-    }
-
-    fun saveSnapshot() {
-        val previousSnapshot = store.loadSnapshot()
-        val snapshot =
-            WifiReconnectSnapshot(
-                enabled = enabled,
-                primaryNetwork =
-                    primarySsid.trim().takeIf(String::isNotBlank)?.let { ssid ->
-                        WifiReconnectNetwork(ssid, primaryPassphrase)
-                    },
-                candidateNetworks =
-                    candidateLines
-                        .lineSequence()
-                        .map(String::trim)
-                        .filter(String::isNotBlank)
-                        .mapNotNull { line ->
-                            val parts = line.split('|', limit = 2)
-                            val ssid = parts.firstOrNull()?.trim().orEmpty()
-                            val passphrase = parts.getOrNull(1)?.trim().orEmpty()
-                            if (ssid.isBlank() || passphrase.isBlank()) {
-                                null
-                            } else {
-                                WifiReconnectNetwork(ssid, passphrase)
-                            }
-                        }.toList(),
-            )
-        store.saveSnapshot(snapshot)
-        refreshSignal += 1
-        statusMessage = suggestionRegistrar.syncSuggestions(previousSnapshot, snapshot)
-    }
-
-    SettingsPageColumn {
-        item {
-            SettingsSectionCard(
-                title = "Wi-Fi 重连",
-                body = "后台自动预约和自动签到断网后，会等待系统按已登记的 Wi-Fi 建议自动恢复连接。密码只保存在本地加密存储里。",
+private fun BuildInfoRow(presentation: BuildInfoRowPresentation) {
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceContainerHighest,
+        shape = MaterialTheme.shapes.medium,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.Top,
+        ) {
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                ) {
-                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text("启用后台 Wi-Fi 重连", style = MaterialTheme.typography.titleMedium)
-                        InfoText("保存后会把这些网络登记给系统，实际连回哪个由系统决定。")
-                    }
-                    Switch(checked = enabled, onCheckedChange = { enabled = it })
-                }
-                OutlinedTextField(
-                    value = primarySsid,
-                    onValueChange = { primarySsid = it },
-                    label = { Text("主 Wi-Fi SSID") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
+                Text(
+                    text = presentation.title,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
                 )
-                OutlinedTextField(
-                    value = primaryPassphrase,
-                    onValueChange = { primaryPassphrase = it },
-                    label = { Text("主 Wi-Fi 密码") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
+                Text(
+                    text = presentation.detail,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                OutlinedTextField(
-                    value = candidateLines,
-                    onValueChange = { candidateLines = it },
-                    label = { Text("候选 Wi-Fi 列表") },
-                    supportingText = {
-                        Text("每行一个，格式：SSID|密码。系统会在这些候选里自动选择可用网络。")
-                    },
-                    minLines = 4,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                ) {
-                    Button(
-                        onClick = ::saveSnapshot,
-                        modifier = Modifier.weight(1f),
-                    ) {
-                        Text("保存配置")
-                    }
-                    OutlinedButton(
-                        onClick = {
-                            refreshSignal += 1
-                            statusMessage = "已重新读取本地配置"
-                        },
-                        modifier = Modifier.weight(1f),
-                    ) {
-                        Text("重新读取")
-                    }
-                }
-                InfoText("应用不会读取系统里已保存的 Wi-Fi，也不会把明文密码写进日志。")
-                statusMessage?.let { message ->
-                    InfoText(message)
-                }
             }
+            StatusBadge(
+                text = presentation.badgeLabel,
+                tone = presentation.badgeTone,
+            )
         }
     }
 }
+
+internal data class BuildInfoRowPresentation(
+    val title: String,
+    val detail: String,
+    val badgeLabel: String,
+    val badgeTone: StatusTone,
+)
+
+internal fun buildBuildInfoRowPresentation(
+    label: String,
+    value: String,
+): BuildInfoRowPresentation =
+    BuildInfoRowPresentation(
+        title = label.trim().ifBlank { "构建字段" },
+        detail = value.trim().ifBlank { "未知" },
+        badgeLabel = "元数据",
+        badgeTone = StatusTone.Neutral,
+    )
 
 @Composable
 fun PermissionsScreen() {
@@ -250,20 +188,34 @@ fun PermissionsScreen() {
         throw lastError ?: IllegalStateException("无法打开系统设置")
     }
 
-    SettingsPageColumn {
+    SettingsLazyColumn {
         item {
-            SettingsSectionCard(
-                title = "权限",
+            SettingsHeroCard(
+                title = "权限状态",
                 body =
                     if (incompleteCapabilityCount == 0) {
                         "运行时权限和系统授权都已就绪。后台运行时不要手动清掉常驻通知。"
                     } else {
                         "还有 $incompleteCapabilityCount 项未完成，系统可能拦住后台运行或前台服务。"
                     },
+                badge = if (incompleteCapabilityCount == 0) "已就绪" else "待处理 $incompleteCapabilityCount 项",
+            )
+        }
+        item {
+            SettingsCard(
+                title = "授权检查",
+                body = "逐项确认后台运行、提醒、通知和自动操作依赖的系统能力。",
             ) {
                 capabilityStatuses.forEach { status ->
-                    InfoText("${status.title}：${status.detail}")
+                    PermissionStatusRow(buildPermissionStatusRowPresentation(status))
                 }
+            }
+        }
+        item {
+            SettingsCard(
+                title = "系统入口",
+                body = "跳转到 Android 系统设置补齐权限；返回本页后状态会自动刷新。",
+            ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -340,44 +292,268 @@ fun PermissionsScreen() {
                 ) {
                     Text("精确闹钟入口")
                 }
-                InfoText("厂商自启动、后台白名单和省电策略需要你自己到系统管家里确认。")
+                PermissionStatusRow(buildManualPermissionHintPresentation())
             }
         }
     }
 }
+
+@Composable
+private fun PermissionStatusRow(presentation: PermissionStatusRowPresentation) {
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceContainerHighest,
+        shape = MaterialTheme.shapes.medium,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.Top,
+        ) {
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Text(
+                    text = presentation.title,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Text(
+                    text = presentation.detail,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            StatusBadge(
+                text = presentation.badgeLabel,
+                tone = presentation.badgeTone,
+            )
+        }
+    }
+}
+
+internal data class PermissionStatusRowPresentation(
+    val title: String,
+    val detail: String,
+    val badgeLabel: String,
+    val badgeTone: StatusTone,
+)
+
+internal fun buildPermissionStatusRowPresentation(
+    status: CapabilityStatus,
+): PermissionStatusRowPresentation =
+    PermissionStatusRowPresentation(
+        title = status.title.trim().ifBlank { "未命名能力" },
+        detail = status.detail.trim().ifBlank { "暂无说明" },
+        badgeLabel = if (status.ready) "已就绪" else "待处理",
+        badgeTone = if (status.ready) StatusTone.Positive else StatusTone.Warning,
+    )
+
+internal fun buildManualPermissionHintPresentation(): PermissionStatusRowPresentation =
+    PermissionStatusRowPresentation(
+        title = "厂商后台策略",
+        detail = "厂商自启动、后台白名单和省电策略需要你自己到系统管家里确认。",
+        badgeLabel = "需手动确认",
+        badgeTone = StatusTone.Warning,
+    )
 
 @Composable
 fun RuntimeGuideScreen() {
-    SettingsPageColumn {
+    SettingsLazyColumn {
         item {
-            SettingsSectionCard(
+            SettingsHeroCard(
                 title = "运行说明",
                 body = "自动预约依赖后台存活、前台服务通知和系统不误杀。切到后台后，不要手动清掉常驻通知。",
+                badge = "后台运行",
+            )
+        }
+        item {
+            SettingsCard(
+                title = "运行前检查",
+                body = "按顺序完成这些动作，可以减少任务漏跑和后台被系统清理的情况。",
             ) {
-                InfoText("1. 账号页先完成认证，保证每个账号都有可复用登录态。")
-                InfoText("2. 创建自动任务后，应用会立即调度首轮执行，不需要等到固定时间。")
-                InfoText("3. 如果系统限制后台运行，先到权限页把通知、电池优化和无障碍检查完。")
-                InfoText("4. 厂商自启动、后台白名单需要你自己到系统管家里确认。")
+                buildRuntimeGuideStepPresentations().forEach { step ->
+                    RuntimeGuideStepRow(step)
+                }
             }
         }
     }
 }
 
 @Composable
+private fun RuntimeGuideStepRow(presentation: RuntimeGuideStepPresentation) {
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceContainerHighest,
+        shape = MaterialTheme.shapes.medium,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.Top,
+        ) {
+            Surface(
+                color = MaterialTheme.colorScheme.primaryContainer,
+                shape = MaterialTheme.shapes.small,
+            ) {
+                Text(
+                    text = presentation.number,
+                    modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Text(
+                    text = presentation.title,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Text(
+                    text = presentation.detail,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            StatusBadge(
+                text = presentation.badgeLabel,
+                tone = presentation.badgeTone,
+            )
+        }
+    }
+}
+
+internal data class RuntimeGuideStepPresentation(
+    val number: String,
+    val title: String,
+    val detail: String,
+    val badgeLabel: String,
+    val badgeTone: StatusTone,
+)
+
+internal fun buildRuntimeGuideStepPresentations(): List<RuntimeGuideStepPresentation> =
+    listOf(
+        RuntimeGuideStepPresentation(
+            number = "1",
+            title = "账号登录态",
+            detail = "账号页先完成认证，保证每个账号都有可复用登录态。",
+            badgeLabel = "运行前",
+            badgeTone = StatusTone.Info,
+        ),
+        RuntimeGuideStepPresentation(
+            number = "2",
+            title = "首轮调度",
+            detail = "创建自动任务后，应用会立即调度首轮执行，不需要等到固定时间。",
+            badgeLabel = "运行前",
+            badgeTone = StatusTone.Info,
+        ),
+        RuntimeGuideStepPresentation(
+            number = "3",
+            title = "系统权限",
+            detail = "如果系统限制后台运行，先到权限页把通知、电池优化和无障碍检查完。",
+            badgeLabel = "运行前",
+            badgeTone = StatusTone.Info,
+        ),
+        RuntimeGuideStepPresentation(
+            number = "4",
+            title = "厂商白名单",
+            detail = "厂商自启动、后台白名单需要你自己到系统管家里确认。",
+            badgeLabel = "运行前",
+            badgeTone = StatusTone.Info,
+        ),
+    )
+
+@Composable
 fun AutomationGuideScreen() {
-    SettingsPageColumn {
+    SettingsLazyColumn {
         item {
-            SettingsSectionCard(
+            SettingsHeroCard(
                 title = "自动预约说明",
                 body = "默认是持续预约：10 点前会尝试补今天和后两天；10 点后会改为检查明天到大后天，缺哪天就补哪天。也可以改成自定义单次时间段。",
+                badge = "持续预约",
+            )
+        }
+        item {
+            SettingsCard(
+                title = "预约规则",
+                body = "这些规则影响自动任务默认目标和查询行为。",
             ) {
-                InfoText("目标座位默认来自账号里最近一次成功的手动预约或自动任务配置。")
-                InfoText("自动任务弹窗里保留“刷新/查询座位”按钮；只有你主动点了才会查询。")
-                InfoText("单次模式需要自己填写日期、开始时间和结束时间。")
+                buildAutomationGuideRulePresentations().forEach { rule ->
+                    AutomationGuideRuleRow(rule)
+                }
             }
         }
     }
 }
+
+@Composable
+private fun AutomationGuideRuleRow(presentation: AutomationGuideRulePresentation) {
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceContainerHighest,
+        shape = MaterialTheme.shapes.medium,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.Top,
+        ) {
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Text(
+                    text = presentation.title,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Text(
+                    text = presentation.detail,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            StatusBadge(
+                text = presentation.badgeLabel,
+                tone = presentation.badgeTone,
+            )
+        }
+    }
+}
+
+internal data class AutomationGuideRulePresentation(
+    val title: String,
+    val detail: String,
+    val badgeLabel: String,
+    val badgeTone: StatusTone,
+)
+
+internal fun buildAutomationGuideRulePresentations(): List<AutomationGuideRulePresentation> =
+    listOf(
+        AutomationGuideRulePresentation(
+            title = "目标座位",
+            detail = "默认来自账号里最近一次成功的手动预约或自动任务配置。",
+            badgeLabel = "预约规则",
+            badgeTone = StatusTone.Info,
+        ),
+        AutomationGuideRulePresentation(
+            title = "座位查询",
+            detail = "自动任务弹窗里保留“刷新/查询座位”按钮；只有你主动点了才会查询。",
+            badgeLabel = "预约规则",
+            badgeTone = StatusTone.Info,
+        ),
+        AutomationGuideRulePresentation(
+            title = "单次模式",
+            detail = "需要自己填写日期、开始时间和结束时间。",
+            badgeLabel = "预约规则",
+            badgeTone = StatusTone.Info,
+        ),
+    )
 
 @Composable
 fun DiagnosticsScreen(
@@ -403,9 +579,9 @@ fun DiagnosticsScreen(
         refreshSignal += 1
     }
 
-    SettingsPageColumn {
+    SettingsLazyColumn {
         item {
-            SettingsSectionCard(
+            SettingsHeroCard(
                 title = "诊断日志",
                 body =
                     if (diagnosticsSnapshot.entries.isEmpty()) {
@@ -413,6 +589,13 @@ fun DiagnosticsScreen(
                     } else {
                         "日志按时间倒序汇总展示，支持一键复制全部诊断内容，也可以一键清空。"
                     },
+                badge = "${diagnosticsSnapshot.entries.size} 条",
+            )
+        }
+        item {
+            SettingsCard(
+                title = "日志操作",
+                body = "复制或分享给排查人员；清空只影响本机已缓存的诊断日志。",
             ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -470,9 +653,16 @@ fun DiagnosticsScreen(
                         clearLogs()
                     }
                 }
-                actionMessage?.let { message -> InfoText(message) }
+                actionMessage?.let { message -> SettingsInfoText(message) }
+            }
+        }
+        item {
+            SettingsCard(
+                title = "日志明细",
+                body = "按时间倒序展示最近记录。",
+            ) {
                 if (diagnosticsSnapshot.entries.isEmpty()) {
-                    InfoText("暂无日志")
+                    SettingsEmptyText("暂无日志")
                 } else {
                     diagnosticsSnapshot.entries.forEach { item -> DiagnosticsLogCard(item) }
                 }
@@ -503,42 +693,12 @@ private fun shareDiagnosticsLog(
 }
 
 @Composable
-private fun SettingsPageColumn(
-    content: androidx.compose.foundation.lazy.LazyListScope.() -> Unit,
-) {
-    LazyColumn(
-        contentPadding = PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-        content = content,
-    )
-}
-
-@Composable
-private fun SettingsSectionCard(
-    title: String,
-    body: String,
-    content: @Composable ColumnScope.() -> Unit,
-) {
-    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
-        Column(
-            modifier = Modifier.padding(18.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-            content = {
-                Text(text = title, style = MaterialTheme.typography.titleLarge)
-                Text(
-                    text = body,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                content()
-            },
-        )
-    }
-}
-
-@Composable
 private fun DiagnosticsLogCard(item: DiagnosticsLogEntry) {
-    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceContainerHighest,
+        shape = MaterialTheme.shapes.medium,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
         Column(
             modifier = Modifier.padding(14.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp),
@@ -558,13 +718,4 @@ private fun DiagnosticsLogCard(item: DiagnosticsLogEntry) {
             }
         }
     }
-}
-
-@Composable
-private fun InfoText(text: String) {
-    Text(
-        text = text,
-        style = MaterialTheme.typography.bodyMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-    )
 }

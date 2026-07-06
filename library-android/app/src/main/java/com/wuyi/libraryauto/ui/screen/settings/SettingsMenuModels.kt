@@ -6,32 +6,26 @@ import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.BugReport
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.MonitorHeart
-import androidx.compose.material.icons.outlined.NetworkCheck
 import androidx.compose.material.icons.outlined.PowerSettingsNew
-import androidx.compose.material.icons.outlined.School
-import androidx.compose.material.icons.outlined.Wifi
 import androidx.compose.material.icons.outlined.WatchLater
 import androidx.compose.material.icons.outlined.CloudSync
 import androidx.compose.ui.graphics.vector.ImageVector
 
 const val SettingsHomeRoute = "settings/home"
 const val SettingsBuildInfoRoute = "settings/build-info"
-const val SettingsWifiReconnectRoute = "settings/wifi-reconnect"
 const val SettingsPermissionsRoute = "settings/permissions"
 const val SettingsRuntimeGuideRoute = "settings/runtime-guide"
 const val SettingsAutomationGuideRoute = "settings/automation-guide"
-const val SettingsCampusNetworkRoute = "settings/campus-network"
-const val SettingsNetworkMonitoringRoute = "settings/network-monitoring"
 const val SettingsSignInMonitoringRoute = "settings/sign-in-monitoring"
 const val SettingsWatchdogStatusRoute = "settings/watchdog-status"
 const val SettingsDiagnosticsRoute = "settings/diagnostics"
 const val SettingsServerSyncRoute = "settings/server-sync"
 
 enum class SettingsGroup(val title: String) {
-    Runtime("运行 / 任务"),
-    Network("网络"),
-    Sync("服务端同步"),
-    Diagnostics("诊断 / 关于"),
+    Runtime("常用"),
+    Network("监控"),
+    Sync("同步"),
+    Diagnostics("诊断"),
 }
 
 data class SettingsDestination(
@@ -74,27 +68,6 @@ val settingsDestinations =
             group = SettingsGroup.Runtime,
         ),
         // 网络
-        SettingsDestination(
-            route = SettingsWifiReconnectRoute,
-            title = "Wi-Fi 重连",
-            summary = "维护后台自动任务可用的主 Wi-Fi 与候选 Wi-Fi 凭据",
-            icon = Icons.Outlined.Wifi,
-            group = SettingsGroup.Network,
-        ),
-        SettingsDestination(
-            route = SettingsCampusNetworkRoute,
-            title = "校园网认证",
-            summary = "管理校园网账号、查看认证开关与最近事件",
-            icon = Icons.Outlined.School,
-            group = SettingsGroup.Network,
-        ),
-        SettingsDestination(
-            route = SettingsNetworkMonitoringRoute,
-            title = "网络监控",
-            summary = "查看主网络与候选网络、最近重连结果与目标域直连状态",
-            icon = Icons.Outlined.NetworkCheck,
-            group = SettingsGroup.Network,
-        ),
         SettingsDestination(
             route = SettingsSignInMonitoringRoute,
             title = "签到监控",

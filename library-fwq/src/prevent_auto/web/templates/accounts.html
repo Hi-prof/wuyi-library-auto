@@ -147,7 +147,7 @@
       >关闭</button>
     </div>
 
-    <div class="new-account-tabs" role="tablist">
+    <div class="new-account-tabs" role="tablist" aria-label="批量处理">
       <button
         type="button"
         class="new-account-tab active"
@@ -156,7 +156,7 @@
         aria-controls="new-account-panel-bulk"
         data-new-account-tab="bulk"
       >批量导入到活跃号池</button>
-      {% if pool_view_available %}
+      {% if pool_advanced_available %}
       <button
         type="button"
         class="new-account-tab"
@@ -196,7 +196,7 @@
 
     {# account-pool-tri-sync · task 9.2：批量导入未启用池（粘贴 / 上传 CSV）。 #}
     {# Pool 服务未装配时（缺少 ACCOUNT_POOL_SECRET_KEY）该区块不渲染。 #}
-    {% if pool_view_available %}
+    {% if pool_advanced_available %}
     <div
       class="new-account-panel"
       id="new-account-panel-idle"
@@ -619,7 +619,7 @@
   {# account-pool-tri-sync · task 9.3：未启用池 Tab 顶部「随机抽一个」按钮。 #}
   {# 仅在选中 Idle Tab 时渲染；点击后 POST /accounts/random-pick，命中后由后端 #}
   {# 重定向带回 ``random_picked_account_id``，触发下方 modal 弹出（仅展示学号 / 备注）。 #}
-  {% if selected_pool == 'idle' %}
+  {% if pool_advanced_available and selected_pool == 'idle' %}
   <div class="account-pool-tab-actions" data-pool-tab-actions="idle">
     <form
       class="account-pool-random-pick-form"

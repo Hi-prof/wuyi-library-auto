@@ -1,0 +1,15 @@
+{
+  "name": "prevent-auto-frontend",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "build:css": "tailwindcss -i ./src/prevent_auto/web/static/css/input.css -o ./src/prevent_auto/web/static/css/main.css --minify",
+    "watch:css": "tailwindcss -i ./src/prevent_auto/web/static/css/input.css -o ./src/prevent_auto/web/static/css/main.css --watch"
+  },
+  "devDependencies": {
+    "tailwindcss": "^3.4.0",
+    "@tailwindcss/forms": "^0.5.7",
+    "autoprefixer": "^10.4.16",
+    "postcss": "^8.4.32"
+  }
+}

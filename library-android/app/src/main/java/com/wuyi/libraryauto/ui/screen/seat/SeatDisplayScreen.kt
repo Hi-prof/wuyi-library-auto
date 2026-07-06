@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+
 package com.wuyi.libraryauto.ui.screen.seat
 
 import androidx.compose.foundation.layout.Arrangement
@@ -20,10 +22,10 @@ import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.Done
 import androidx.compose.material.icons.outlined.PersonAdd
 import androidx.compose.material.icons.outlined.Refresh
-import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -34,7 +36,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -47,7 +48,8 @@ import com.wuyi.libraryauto.R
 import com.wuyi.libraryauto.core.network.seat.SeatBookingLiveState
 import com.wuyi.libraryauto.ui.components.EmptyStatePanel
 import com.wuyi.libraryauto.ui.components.StatusBadge
-import com.wuyi.libraryauto.ui.components.StatusTone
+import com.wuyi.libraryauto.ui.repository.seat.BatchCheckInResult
+import com.wuyi.libraryauto.ui.repository.seat.BatchReservationResult
 import com.wuyi.libraryauto.ui.repository.seat.SeatDisplayRepository
 import com.wuyi.libraryauto.ui.viewmodel.SeatDisplayViewModel
 import com.wuyi.libraryauto.ui.viewmodel.SeatDisplayViewModelFactory
@@ -85,13 +87,37 @@ fun SeatDisplayScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             item {
+                val headerPresentation =
+                    buildSeatDisplayHeaderPresentation(
+                        cardCount = uiState.cards.size,
+                        waitingSignIn = uiState.cards.count { it.liveState == SeatBookingLiveState.RESERVED_WAITING_SIGNIN },
+                        activeSignedIn = uiState.cards.count { it.liveState == SeatBookingLiveState.ACTIVE_SIGNED_IN },
+                        isRefreshing = uiState.isRefreshingAll,
+                        isBatchCheckingIn = uiState.isBatchCheckingIn,
+                        isBatchReserving = uiState.isBatchReserving,
+                    )
                 SeatDisplayStatsHeader(
-                    cardCount = uiState.cards.size,
-                    waitingSignIn = uiState.cards.count { it.liveState == SeatBookingLiveState.RESERVED_WAITING_SIGNIN },
-                    activeSignedIn = uiState.cards.count { it.liveState == SeatBookingLiveState.ACTIVE_SIGNED_IN },
-                    isRefreshing = uiState.isRefreshingAll,
+                    presentation = headerPresentation,
                     onRefreshAll = viewModel::refreshAll,
+                    onBatchCheckIn = viewModel::batchCheckIn,
+                    onBatchMakeupReservation = viewModel::batchMakeupReservation,
                 )
+            }
+            if (uiState.batchProgressMessage.isNotBlank()) {
+                item {
+                    BatchStatusBanner(
+                        message = uiState.batchProgressMessage,
+                        isError = false,
+                    )
+                }
+            }
+            if (uiState.batchErrorMessage.isNotBlank()) {
+                item {
+                    BatchStatusBanner(
+                        message = uiState.batchErrorMessage,
+                        isError = true,
+                    )
+                }
             }
             if (rooms.isEmpty()) {
                 item {
@@ -133,19 +159,150 @@ fun SeatDisplayScreen(
                 }
             }
         }
+
+        uiState.lastBatchCheckInResult?.let { result ->
+            BatchCheckInResultDialog(
+                result = result,
+                onDismiss = viewModel::dismissBatchCheckInResult,
+            )
+        }
+
+        uiState.lastBatchReservationResult?.let { result ->
+            BatchReservationResultDialog(
+                result = result,
+                onDismiss = viewModel::dismissBatchReservationResult,
+            )
+        }
+    }
+}
+
+@Composable
+private fun BatchStatusBanner(
+    message: String,
+    isError: Boolean,
+) {
+    Surface(
+        color = if (isError) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.tertiaryContainer,
+        shape = RoundedCornerShape(16.dp),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Text(
+            text = message,
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+            style = MaterialTheme.typography.bodyMedium,
+            color = if (isError) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onTertiaryContainer,
+        )
+    }
+}
+
+@Composable
+private fun BatchCheckInResultDialog(
+    result: BatchCheckInResult,
+    onDismiss: () -> Unit,
+) {
+    SeatDisplayBatchResultSheet(
+        presentation = buildBatchCheckInResultPresentation(result),
+        onDismiss = onDismiss,
+    )
+}
+
+@Composable
+private fun BatchReservationResultDialog(
+    result: BatchReservationResult,
+    onDismiss: () -> Unit,
+) {
+    SeatDisplayBatchResultSheet(
+        presentation = buildBatchReservationResultPresentation(result),
+        onDismiss = onDismiss,
+    )
+}
+
+@Composable
+private fun SeatDisplayBatchResultSheet(
+    presentation: SeatDisplayBatchResultPresentation,
+    onDismiss: () -> Unit,
+) {
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+    ) {
+        Column(
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp)
+                    .padding(bottom = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    Text(
+                        text = presentation.title,
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    Text(
+                        text = presentation.summary,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                StatusBadge(
+                    text = presentation.statusBadgeLabel,
+                    tone = presentation.statusBadgeTone,
+                )
+            }
+            if (presentation.detailTitle != null) {
+                Surface(
+                    color = MaterialTheme.colorScheme.errorContainer,
+                    contentColor = MaterialTheme.colorScheme.onErrorContainer,
+                    shape = RoundedCornerShape(16.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Column(
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Text(
+                            text = presentation.detailTitle,
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                        presentation.detailLines.forEach { line ->
+                            Text(
+                                text = line,
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                        }
+                    }
+                }
+            }
+            FilledTonalButton(
+                onClick = onDismiss,
+                modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp),
+                shape = RoundedCornerShape(14.dp),
+            ) {
+                Text(presentation.confirmAction.label)
+            }
+        }
     }
 }
 
 @Composable
 private fun SeatDisplayStatsHeader(
-    cardCount: Int,
-    waitingSignIn: Int,
-    activeSignedIn: Int,
-    isRefreshing: Boolean,
+    presentation: SeatDisplayHeaderPresentation,
     onRefreshAll: () -> Unit,
+    onBatchCheckIn: () -> Unit,
+    onBatchMakeupReservation: () -> Unit,
 ) {
     Surface(
-        color = MaterialTheme.colorScheme.primaryContainer,
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
         shape = RoundedCornerShape(20.dp),
         modifier = Modifier.fillMaxWidth(),
     ) {
@@ -153,47 +310,73 @@ private fun SeatDisplayStatsHeader(
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Icon(
-                    imageVector = Icons.Outlined.AutoAwesome,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                    modifier = Modifier.size(20.dp),
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(
+                    text = presentation.title,
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.SemiBold,
                 )
                 Text(
-                    text = "座位概览",
-                    style = MaterialTheme.typography.titleLarge,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer,
-                    fontWeight = FontWeight.SemiBold,
+                    text = presentation.subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                StatusBadge(text = "账号 $cardCount", tone = StatusTone.Info)
-                StatusBadge(text = "待签到 $waitingSignIn", tone = StatusTone.Warning, icon = Icons.Outlined.Schedule)
-                StatusBadge(text = "已签到 $activeSignedIn", tone = StatusTone.Positive, icon = Icons.Outlined.Done)
+                presentation.badges.forEach { badge ->
+                    StatusBadge(text = badge.label, tone = badge.tone)
+                }
             }
-            FilledTonalButton(
-                onClick = onRefreshAll,
-                enabled = !isRefreshing && cardCount > 0,
-                modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
-                shape = RoundedCornerShape(14.dp),
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.fillMaxWidth(),
             ) {
-                Icon(
-                    imageVector = Icons.Outlined.Refresh,
-                    contentDescription = null,
-                    modifier = Modifier.size(18.dp),
-                )
-                Spacer(Modifier.width(6.dp))
-                Text(
-                    if (isRefreshing) {
-                        stringResource(R.string.seat_display_refreshing)
-                    } else {
-                        stringResource(R.string.seat_display_refresh_all)
-                    },
-                )
+                FilledTonalButton(
+                    onClick = onRefreshAll,
+                    enabled = presentation.refreshAction.enabled,
+                    modifier = Modifier.weight(1f).heightIn(min = 52.dp),
+                    shape = RoundedCornerShape(14.dp),
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Refresh,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Text(presentation.refreshAction.label)
+                }
+                presentation.checkInAction?.let { action ->
+                    FilledTonalButton(
+                        onClick = onBatchCheckIn,
+                        enabled = action.enabled,
+                        modifier = Modifier.weight(1f).heightIn(min = 52.dp),
+                        shape = RoundedCornerShape(14.dp),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.Done,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp),
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Text(action.label)
+                    }
+                }
+            }
+            presentation.makeupReservationAction?.let { action ->
+                FilledTonalButton(
+                    onClick = onBatchMakeupReservation,
+                    enabled = action.enabled,
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
+                    shape = RoundedCornerShape(14.dp),
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.AutoAwesome,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Text(action.label)
+                }
             }
         }
     }

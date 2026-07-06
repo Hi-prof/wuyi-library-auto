@@ -438,7 +438,11 @@ def _apply_action_result(
             reserve_target_dates=result.target_dates,
             reserve_booked_dates=result.booked_dates,
             reserve_next_run_at=_datetime_to_iso(
-                _build_next_interval_run_at(now, plan.reserve_check_interval_minutes),
+                _build_next_interval_run_at(
+                    now,
+                    plan.reserve_check_interval_minutes,
+                    plan.reserve_time,
+                ),
             ),
         )
     if action == "checkin":
@@ -471,7 +475,12 @@ def _build_initial_reserve_run_at(
     interval_minutes: int,
     now: datetime,
 ) -> str:
-    return _datetime_to_iso(now)
+    del selected_date, interval_minutes
+    candidate = datetime.combine(now.date(), _parse_time(reserve_time))
+    current_minute = now.replace(second=0, microsecond=0)
+    if candidate >= current_minute:
+        return _datetime_to_iso(candidate)
+    return _datetime_to_iso(candidate + timedelta(days=1))
 
 
 def _build_initial_daily_run_at(
@@ -517,11 +526,26 @@ def _build_same_day_retry_run_at(
     return retry_at
 
 
-def _build_next_interval_run_at(now: datetime, interval_minutes: int) -> datetime:
+def _build_next_interval_run_at(
+    now: datetime,
+    interval_minutes: int,
+    anchor_time: str = "00:00",
+) -> datetime:
+    interval = max(int(interval_minutes), 1)
+    anchor = datetime.combine(now.date(), _parse_time(anchor_time))
     next_time = now.replace(second=0, microsecond=0) + timedelta(minutes=1)
-    remainder = next_time.minute % interval_minutes
+    if next_time <= anchor:
+        return anchor
+
+    elapsed_minutes = int((next_time - anchor).total_seconds() // 60)
+    remainder = elapsed_minutes % interval
     if remainder:
-        next_time += timedelta(minutes=interval_minutes - remainder)
+        next_time += timedelta(minutes=interval - remainder)
+    if next_time.date() != now.date():
+        return datetime.combine(
+            now.date() + timedelta(days=1),
+            _parse_time(anchor_time),
+        )
     return next_time.replace(second=0, microsecond=0)
 
 
