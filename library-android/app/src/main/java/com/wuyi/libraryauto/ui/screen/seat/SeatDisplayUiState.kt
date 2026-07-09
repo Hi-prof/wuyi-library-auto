@@ -25,6 +25,7 @@ data class SeatDisplayCardUiState(
     val seatNumber: String = "",
     val beginLabel: String = "",
     val liveState: SeatBookingLiveState = SeatBookingLiveState.IDLE,
+    val checkinWindowOpen: Boolean = false,
     val statusLabel: String = liveState.toChineseLabel(),
     val failureMessage: String? = null,
     val lastUpdatedEpochMillis: Long = 0L,

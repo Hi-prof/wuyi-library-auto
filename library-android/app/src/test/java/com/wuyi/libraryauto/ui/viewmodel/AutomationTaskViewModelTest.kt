@@ -59,12 +59,12 @@ class AutomationTaskViewModelTest {
         assertThat(viewModel.uiState.dialog.mode).isEqualTo(AutomationTaskMode.CONTINUOUS)
         assertThat(viewModel.uiState.dialog.roomName).isEqualTo("自习室圆形二楼")
         assertThat(viewModel.uiState.dialog.seatNumber).isEqualTo("166")
-        assertThat(viewModel.uiState.dialog.previewText).contains("2026-04-11 9:00-22:00")
+        assertThat(viewModel.uiState.dialog.previewText).contains("2026-04-11 10:00-22:00")
         assertThat(viewModel.uiState.dialog.previewText).contains("2026-04-13 8:00-22:00")
     }
 
     @Test
-    fun `task dialog preview includes day after tomorrow after 10am`() = runTest {
+    fun `task dialog preview rounds partial current hour up`() = runTest {
         val viewModel =
             buildViewModel(
                 clock = Clock.fixed(Instant.parse("2026-04-11T02:30:00Z"), ZoneId.of("Asia/Shanghai")),
@@ -74,7 +74,7 @@ class AutomationTaskViewModelTest {
         advanceUntilIdle()
 
         assertThat(viewModel.uiState.dialog.previewText)
-            .isEqualTo("2026-04-11 10:00-22:00；2026-04-12 8:00-22:00；2026-04-13 8:00-22:00")
+            .isEqualTo("2026-04-11 11:00-22:00；2026-04-12 8:00-22:00；2026-04-13 8:00-22:00")
     }
 
     @Test
@@ -239,7 +239,7 @@ class AutomationTaskViewModelTest {
         assertThat(viewModel.uiState.dialog.customDate).isEmpty()
         assertThat(viewModel.uiState.dialog.customStartTime).isEmpty()
         assertThat(viewModel.uiState.dialog.customEndTime).isEmpty()
-        assertThat(viewModel.uiState.dialog.previewText).contains("2026-04-11 9:00-22:00")
+        assertThat(viewModel.uiState.dialog.previewText).contains("2026-04-11 10:00-22:00")
         assertThat(viewModel.uiState.dialog.seatOptions).isEmpty()
         assertThat(viewModel.uiState.dialog.dialogMessage).isNull()
         assertThat(viewModel.uiState.dialog.isRefreshingSeats).isFalse()

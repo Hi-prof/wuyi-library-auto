@@ -40,7 +40,7 @@ class StorageAutomationPlanRepositoryTest {
         val savedPlan = repository.observePlans().first().single()
         assertThat(savedPlan.studentId).isEqualTo("20230001")
         assertThat(savedPlan.seatNumber).isEqualTo("166")
-        assertThat(savedPlan.previewText).contains("2026-04-11 9:00-22:00")
+        assertThat(savedPlan.previewText).contains("2026-04-11 10:00-22:00")
         assertThat(savedPlan.previewText).contains("2026-04-13 8:00-22:00")
         assertThat(accountPreferenceWriter.lastUpdate).isEqualTo(
             PreferredSeatUpdate(
@@ -54,7 +54,7 @@ class StorageAutomationPlanRepositoryTest {
     }
 
     @Test
-    fun `savePlan preview keeps today even after 10am`() = runTest {
+    fun `savePlan preview rounds partial current hour up`() = runTest {
         val repository =
             StorageAutomationPlanRepository(
                 automationPlanDao = FakeAutomationPlanDao(),
@@ -75,7 +75,7 @@ class StorageAutomationPlanRepositoryTest {
 
         val savedPlan = repository.observePlans().first().single()
         assertThat(savedPlan.previewText)
-            .isEqualTo("2026-04-11 10:00-22:00；2026-04-12 8:00-22:00；2026-04-13 8:00-22:00")
+            .isEqualTo("2026-04-11 11:00-22:00；2026-04-12 8:00-22:00；2026-04-13 8:00-22:00")
     }
 
     @Test

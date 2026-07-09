@@ -15,14 +15,20 @@ class BuildContinuousReservationWindowsUseCase {
      *
      * 行为约束（用户口径）：
      * - 学校允许预约今天、明天、后天。
-     * - 当天窗口起始时间 = max(now.hour, 8)；当 `now.hour >= 22` 时跳过当天，避免生成空窗口。
+     * - 当天窗口起始时间向后取整到下一个整点，且不早于 8:00；当取整后 >= 22 时跳过当天，避免生成空窗口。
      * - 明天、后天固定 8:00-22:00。
      * - 任何情况下都至少返回 3 个窗口。如果今天被跳过，则向后顺延一天补齐到第三天。
      */
     operator fun invoke(now: LocalDateTime): List<ReservationWindow> {
         val windows = mutableListOf<ReservationWindow>()
         val today = now.toLocalDate()
-        val todayStartHour = max(now.hour, DAILY_OPEN_HOUR)
+        val nextAvailableHour =
+            if (now.minute == 0 && now.second == 0 && now.nano == 0) {
+                now.hour
+            } else {
+                now.hour + 1
+            }
+        val todayStartHour = max(nextAvailableHour, DAILY_OPEN_HOUR)
         if (todayStartHour < DAILY_CLOSE_HOUR) {
             windows += ReservationWindow(
                 targetDate = today.toString(),

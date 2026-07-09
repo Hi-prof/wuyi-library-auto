@@ -15,6 +15,8 @@ import com.wuyi.libraryauto.core.network.seat.SeatQueryGateway
 import com.wuyi.libraryauto.core.network.seat.SeatReservationGateway
 import com.wuyi.libraryauto.core.storage.db.ReservationTaskDao
 import com.wuyi.libraryauto.core.storage.db.ReservationTaskEntity
+import com.wuyi.libraryauto.core.storage.db.ExecutionLogDao
+import com.wuyi.libraryauto.core.storage.db.ExecutionLogEntity
 import com.wuyi.libraryauto.ui.repository.session.SessionRepository
 import com.wuyi.libraryauto.ui.repository.task.AccountPreferenceWriter
 import com.wuyi.libraryauto.ui.repository.task.PreferredSeatUpdate
@@ -124,6 +126,59 @@ class ManualReservationRepositoryTest {
                 limitSignAgoSeconds = 600L,
             ),
         )
+    }
+
+    @Test
+    fun `reserve marks manual action and skips guard when fallback checkin window already expired`() = runTest {
+        val reservationTaskDao = FakeReservationTaskDao()
+        val executionLogDao = FakeExecutionLogDao()
+        val guardScheduler = FakeReservationGuardScheduler()
+        val reservationGateway =
+            FakeSeatReservationGateway(
+                ReservationReceipt(
+                    bookingId = "booking-166",
+                    message = "已提交 自习室圆形二楼 166 号座位预约",
+                ),
+            )
+        val repository =
+            ManualReservationRepository(
+                seatQueryGateway = FakeSeatQueryGateway(),
+                reservationGateway = reservationGateway,
+                reservationTaskDao = reservationTaskDao,
+                executionLogDao = executionLogDao,
+                accountPreferenceWriter = FakeAccountPreferenceWriter(),
+                sessionRepository = FakeSessionRepository(loggedInSession()),
+                guardScheduler = guardScheduler,
+                bookingDetailLoader = NullManualBookingDetailLoader(),
+                clockEpochSeconds = { 1_712_801_800L },
+                ioDispatcher = StandardTestDispatcher(testScheduler),
+            )
+
+        val result =
+            repository.reserve(
+                ManualReservationSelection(
+                    studentId = "20230001",
+                    entryUrl = "https://example.com/#!/Space/Category/list",
+                    roomId = "room-2f",
+                    roomName = "自习室圆形二楼",
+                    seatNumber = "166",
+                    beginTimeEpochSeconds = 1_712_800_000,
+                    durationSeconds = 14_400,
+                ),
+            )
+
+        assertThat(result).isInstanceOf(ManualReservationResult.Success::class.java)
+        assertThat(reservationTaskDao.lastUpserted?.state)
+            .isEqualTo(ReservationTaskState.FAILED_MANUAL_ACTION)
+        assertThat(reservationTaskDao.lastUpserted?.lastError)
+            .isEqualTo("预约详情缺失且兜底签到窗口已过，请手动处理。")
+        assertThat(reservationTaskDao.lastUpserted?.limitSignBackSeconds)
+            .isEqualTo(CheckInWindow.FALLBACK_SECONDS)
+        assertThat(guardScheduler.lastScheduled).isNull()
+        assertThat(executionLogDao.logs.single().state)
+            .isEqualTo(ReservationTaskState.FAILED_MANUAL_ACTION)
+        assertThat(executionLogDao.logs.single().message)
+            .contains("预约详情缺失且兜底签到窗口已过，请手动处理。")
     }
 
     @Test
@@ -422,6 +477,20 @@ class ManualReservationRepositoryTest {
         override suspend fun listAll(): List<ReservationTaskEntity> = emptyList()
     }
 
+    private class FakeExecutionLogDao : ExecutionLogDao {
+        val logs = mutableListOf<ExecutionLogEntity>()
+
+        override suspend fun insert(log: ExecutionLogEntity) {
+            logs += log
+        }
+
+        override suspend fun listAllNewestFirst(): List<ExecutionLogEntity> = logs.asReversed()
+
+        override suspend fun clearAll() {
+            logs.clear()
+        }
+    }
+
     private class FakeAccountPreferenceWriter : AccountPreferenceWriter {
         var lastUpdate: PreferredSeatUpdate? = null
 
@@ -473,6 +542,13 @@ class ManualReservationRepositoryTest {
                 statusLabel = "待签到",
                 isAlreadySignedIn = false,
             )
+    }
+
+    private class NullManualBookingDetailLoader : ManualBookingDetailLoader {
+        override fun load(
+            session: AuthenticatedSession,
+            bookingId: String,
+        ): BookingDetail? = null
     }
 
     private class FakeSessionRepository(

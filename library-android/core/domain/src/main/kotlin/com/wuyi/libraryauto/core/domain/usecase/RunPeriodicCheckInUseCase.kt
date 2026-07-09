@@ -271,4 +271,6 @@ enum class TriggerSource {
     ManualBatch,
     ProcessRestart,
     LoginSuccess,
+    NetworkRestored,
+    CampusAuthRecovery,
 }

@@ -7,30 +7,44 @@ import org.junit.Test
 class BuildContinuousReservationWindowsUseCaseTest {
 
     @Test
-    fun `continuous planner uses today and next two days`() {
+    fun `continuous planner rounds today start up to next hour`() {
         val windows =
             BuildContinuousReservationWindowsUseCase()(
                 now = LocalDateTime.of(2026, 4, 11, 9, 30),
             )
 
         assertThat(windows).containsExactly(
-            ReservationWindow(targetDate = "2026-04-11", startHour = 9, endHour = 22),
+            ReservationWindow(targetDate = "2026-04-11", startHour = 10, endHour = 22),
             ReservationWindow(targetDate = "2026-04-12", startHour = 8, endHour = 22),
             ReservationWindow(targetDate = "2026-04-13", startHour = 8, endHour = 22),
         ).inOrder()
     }
 
     @Test
-    fun `continuous planner keeps today even after 10am as long as before 22`() {
+    fun `continuous planner keeps exact current hour when now is on the hour`() {
         val windows =
             BuildContinuousReservationWindowsUseCase()(
-                now = LocalDateTime.of(2026, 4, 11, 14, 23),
+                now = LocalDateTime.of(2026, 4, 11, 14, 0),
             )
 
         assertThat(windows).containsExactly(
             ReservationWindow(targetDate = "2026-04-11", startHour = 14, endHour = 22),
             ReservationWindow(targetDate = "2026-04-12", startHour = 8, endHour = 22),
             ReservationWindow(targetDate = "2026-04-13", startHour = 8, endHour = 22),
+        ).inOrder()
+    }
+
+    @Test
+    fun `continuous planner skips today when rounded current hour reaches close time`() {
+        val windows =
+            BuildContinuousReservationWindowsUseCase()(
+                now = LocalDateTime.of(2026, 4, 11, 21, 30),
+            )
+
+        assertThat(windows).containsExactly(
+            ReservationWindow(targetDate = "2026-04-12", startHour = 8, endHour = 22),
+            ReservationWindow(targetDate = "2026-04-13", startHour = 8, endHour = 22),
+            ReservationWindow(targetDate = "2026-04-14", startHour = 8, endHour = 22),
         ).inOrder()
     }
 

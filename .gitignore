@@ -1,37 +1,102 @@
-# Python 缓存
+# OS / editor
+.DS_Store
+Thumbs.db
+Desktop.ini
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Python cache / tooling
 __pycache__/
+**/__pycache__/
 *.py[cod]
 *.pyo
 *.pyd
 *.egg-info/
 .pytest_cache/
 .ruff_cache/
+.mypy_cache/
+.pytype/
+.hypothesis/
+.tox/
+.nox/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+pip-wheel-metadata/
 
-# 虚拟环境
+# Virtual environments
 .venv/
 venv/
 env/
 
-# 构建产物
+# Node / frontend dependencies
+node_modules/
+.parcel-cache/
+.vite/
+.turbo/
+
+# Build outputs
 build/
 dist/
-pip-wheel-metadata/
+out/
+target/
+*.apk
+*.aab
+*.ap_
 
-# 本地运行状态
+# Logs and local runtime state
+*.log
+logs/
 runtime/
 output/
+data/
 .tmp/
 .tmp-test/
-.serena/
-.claude/
-.factory/
-AGENTS.md
-config.json
-config.json.bak
+*.tmp
+*.bak
+*.db
+*.sqlite
+*.sqlite3
 别人电脑的运行日志/
 运行日志/
 
-# Android 源码目录不要被上面的 runtime/ 规则误伤
+# Local tool state
+.serena/
+.claude/
+.factory/
+
+# Secrets and local configuration
+.env
+.env.*
+!.env.example
+!**/.env.example
+config.json
+config.json.bak
+*.local
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Trellis local runtime; keep .trellis/spec, tasks, scripts, and workspace trackable.
+.trellis/.developer
+.trellis/.current-task
+.trellis/.runtime/
+.trellis/.agents/
+.trellis/.agent-log
+.trellis/.session-id
+.trellis/.ralph-state.json
+.trellis/**/.plan-log
+.trellis/**/*.tmp
+.trellis/**/*.new
+.trellis/**/__pycache__/
+.trellis/**/*.pyc
+
+# Android source directories that must not be hidden by the runtime/ rule.
 !library-android/core/runtime/
 !library-android/core/runtime/**
 !library-android/app/src/main/java/com/wuyi/libraryauto/runtime/
@@ -39,10 +104,15 @@ config.json.bak
 library-android/core/runtime/build/
 library-android/.gradle/
 library-android/.gradle*/
+library-android/.cxx/
+library-android/.externalNativeBuild/
+library-android/captures/
 library-android/local.properties
 library-android/keystore.properties
 library-android/keystore/
 library-android/*.jks
 library-android/*.keystore
+library-android/**/*.jks
+library-android/**/*.keystore
 library-android/**/hs_err_pid*.log
 library-android/**/replay_pid*.log

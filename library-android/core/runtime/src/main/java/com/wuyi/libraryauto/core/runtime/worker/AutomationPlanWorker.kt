@@ -105,19 +105,34 @@ class AutomationPlanWorker(
                         bookingId = reservation.bookingId,
                         dependencies = dependencies,
                     )
+                    val fallbackWindowAlreadyExpired =
+                        taskSync.usesFallbackWindow &&
+                            nowEpochSeconds >= window.beginTimeEpochSeconds.toLong() + taskSync.limitSignBackSeconds
+                    val taskState =
+                        if (fallbackWindowAlreadyExpired) {
+                            ReservationTaskState.FAILED_MANUAL_ACTION
+                        } else {
+                            ReservationTaskState.RESERVED_WAITING_SIGNIN
+                        }
+                    val taskError =
+                        if (fallbackWindowAlreadyExpired) {
+                            "预约详情缺失且兜底签到窗口已过，请手动处理。"
+                        } else {
+                            null
+                        }
                     val task =
                         ReservationTaskEntity(
                             id = taskId,
                             studentId = plan.studentId,
                             roomName = reservation.roomName,
                             seatNumber = reservation.seatNumber,
-                            state = ReservationTaskState.RESERVED_WAITING_SIGNIN,
+                            state = taskState,
                             bookingId = reservation.bookingId,
                             startTimeEpochSeconds = window.beginTimeEpochSeconds.toLong(),
                             limitSignAgoSeconds = taskSync.limitSignAgoSeconds,
                             limitSignBackSeconds = taskSync.limitSignBackSeconds,
                             expectedMinorsCsv = taskSync.expectedMinorsCsv,
-                            lastError = null,
+                            lastError = taskError,
                         )
                     dependencies.upsertReservationTask(task)
                     dependencies.insertExecutionLog(
@@ -125,14 +140,22 @@ class AutomationPlanWorker(
                             taskId = task.id,
                             state = task.state,
                             recordedAtEpochSeconds = nowEpochSeconds,
-                            message = taskSync.appendNotes("${reservation.message} · ${window.label}"),
+                            message =
+                                taskSync.appendNotes(
+                                    listOfNotNull(
+                                        "${reservation.message} · ${window.label}",
+                                        taskError,
+                                    ).joinToString(" · "),
+                                ),
                         ),
                     )
-                    dependencies.enqueueGuard(
-                        taskId = task.id,
-                        startTimeEpochSeconds = task.startTimeEpochSeconds,
-                        limitSignAgoSeconds = task.limitSignAgoSeconds,
-                    )
+                    if (!fallbackWindowAlreadyExpired) {
+                        dependencies.enqueueGuard(
+                            taskId = task.id,
+                            startTimeEpochSeconds = task.startTimeEpochSeconds,
+                            limitSignAgoSeconds = task.limitSignAgoSeconds,
+                        )
+                    }
                     bookedDates += targetDate
                     results +=
                         WindowAttemptResult(
@@ -188,17 +211,19 @@ class AutomationPlanWorker(
                     limitSignAgoSeconds = CheckInWindow.FALLBACK_SECONDS,
                     limitSignBackSeconds = CheckInWindow.FALLBACK_SECONDS,
                     notes = listOf("读取预约详情失败", "接口未返回有效蓝牙设备信息", "使用兜底签到窗口"),
+                    usesFallbackWindow = true,
                 )
 
         private fun BookingDetail.toTaskSync(): ReservationTaskSync {
             val expectedMinorsCsv = expectedMinors.toMinorCsv()
+            val usesFallbackWindow =
+                window.limitSignAgoSeconds == CheckInWindow.FALLBACK_SECONDS ||
+                    window.limitSignBackSeconds == CheckInWindow.FALLBACK_SECONDS
             val notes = buildList {
                 if (expectedMinorsCsv.isBlank()) {
                     add("接口未返回有效蓝牙设备信息")
                 }
-                if (window.limitSignAgoSeconds == CheckInWindow.FALLBACK_SECONDS ||
-                    window.limitSignBackSeconds == CheckInWindow.FALLBACK_SECONDS
-                ) {
+                if (usesFallbackWindow) {
                     add("使用兜底签到窗口")
                 }
             }
@@ -208,6 +233,7 @@ class AutomationPlanWorker(
                 // 与周期签到一致，把 limitSignBackSeconds 截断到 30 分钟。
                 limitSignBackSeconds = CheckInWindow.capSignBackSeconds(window.limitSignBackSeconds),
                 notes = notes,
+                usesFallbackWindow = usesFallbackWindow,
             )
         }
 
@@ -355,6 +381,7 @@ class AutomationPlanWorker(
             val limitSignAgoSeconds: Long,
             val limitSignBackSeconds: Long,
             val notes: List<String>,
+            val usesFallbackWindow: Boolean,
         ) {
             fun appendNotes(message: String): String =
                 if (notes.isEmpty()) {

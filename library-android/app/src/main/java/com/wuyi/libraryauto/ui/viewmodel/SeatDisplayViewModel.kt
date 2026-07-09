@@ -98,7 +98,8 @@ class SeatDisplayViewModel(
     private suspend fun autoSignInWaitingCards() {
         val targets =
             _uiState.value.cards.filter { card ->
-                card.liveState == SeatBookingLiveState.RESERVED_WAITING_SIGNIN
+                card.liveState == SeatBookingLiveState.RESERVED_WAITING_SIGNIN &&
+                    card.checkinWindowOpen
             }
         if (targets.isEmpty()) return
         targets.forEach { card ->

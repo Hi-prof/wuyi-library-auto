@@ -74,6 +74,13 @@ class SeatDisplayRepository(
                 failureMessage = "座位状态服务不可用",
                 lastUpdatedEpochMillis = clockMillis(),
             )
+        if (card.liveState == SeatBookingLiveState.RESERVED_WAITING_SIGNIN && !card.checkinWindowOpen) {
+            return card.copy(
+                statusLabel = "未到签到时间",
+                failureMessage = null,
+                lastUpdatedEpochMillis = clockMillis(),
+            )
+        }
         return runCatching { executor.performAction(card.studentId, AccountSeatAction.CheckIn) }
             .fold(
                 onSuccess = { result ->
@@ -121,9 +128,16 @@ class SeatDisplayRepository(
     }
 
     suspend fun batchCheckIn(): BatchCheckInResult {
-        val waitingCards = readCachedFromLocal().filter {
-            it.liveState == SeatBookingLiveState.RESERVED_WAITING_SIGNIN
-        }
+        val waitingCards =
+            readCachedFromLocal()
+                .filter { card -> card.liveState == SeatBookingLiveState.RESERVED_WAITING_SIGNIN }
+                .map { card ->
+                    runCatching { fetchSnapshot(card.studentId) }.getOrDefault(card)
+                }
+                .filter { card ->
+                    card.liveState == SeatBookingLiveState.RESERVED_WAITING_SIGNIN &&
+                        card.checkinWindowOpen
+                }
 
         if (waitingCards.isEmpty()) {
             return BatchCheckInResult(
@@ -433,6 +447,7 @@ class SeatDisplayRepository(
             seatNumber = snapshot.seatNumber.ifBlank { seatNumber },
             beginLabel = snapshot.beginLabel.ifBlank { beginLabel },
             liveState = snapshot.liveState,
+            checkinWindowOpen = snapshot.checkinWindowOpen,
             statusLabel = snapshot.statusLabel.ifBlank { snapshot.liveState.toChineseLabel() },
             failureMessage = null,
             lastUpdatedEpochMillis = clockMillis(),

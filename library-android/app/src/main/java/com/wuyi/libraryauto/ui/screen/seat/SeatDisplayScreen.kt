@@ -90,7 +90,11 @@ fun SeatDisplayScreen(
                 val headerPresentation =
                     buildSeatDisplayHeaderPresentation(
                         cardCount = uiState.cards.size,
-                        waitingSignIn = uiState.cards.count { it.liveState == SeatBookingLiveState.RESERVED_WAITING_SIGNIN },
+                        waitingSignIn =
+                            uiState.cards.count { card ->
+                                card.liveState == SeatBookingLiveState.RESERVED_WAITING_SIGNIN &&
+                                    card.checkinWindowOpen
+                            },
                         activeSignedIn = uiState.cards.count { it.liveState == SeatBookingLiveState.ACTIVE_SIGNED_IN },
                         isRefreshing = uiState.isRefreshingAll,
                         isBatchCheckingIn = uiState.isBatchCheckingIn,

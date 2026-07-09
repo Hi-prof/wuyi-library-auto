@@ -107,6 +107,45 @@ class TodayOverviewRepositoryTest {
             assertThat(snapshot.waitingSignInSeatCount).isEqualTo(1)
         }
 
+    @Test
+    fun load_treatsSignedInSeatSnapshotAsCompletedAccountState() =
+        runTest {
+            val repository =
+                TodayOverviewRepository(
+                    accountSource = FakeAccountSource("1001"),
+                    reservationTaskDao =
+                        FakeReservationTaskDao(
+                            listOf(
+                                task("waiting", "1001", ReservationTaskState.RESERVED_WAITING_SIGNIN, "2026-07-04T08:00"),
+                                task("failed", "1001", ReservationTaskState.FAILED_MANUAL_ACTION, "2026-07-04T08:05"),
+                                task("signed", "1001", ReservationTaskState.SIGNIN_SUCCESS, "2026-07-04T08:10"),
+                            ),
+                        ),
+                    seatDisplaySnapshotDao =
+                        FakeSeatDisplaySnapshotDao(
+                            listOf(
+                                seatSnapshot(
+                                    studentId = "1001",
+                                    liveState = "ACTIVE_SIGNED_IN",
+                                    updatedAt = "2026-07-04T09:30",
+                                ),
+                            ),
+                        ),
+                    clock = clock,
+                )
+
+            val snapshot = repository.load()
+
+            assertThat(snapshot.reservedSeatCount).isEqualTo(1)
+            assertThat(snapshot.signedInSeatCount).isEqualTo(1)
+            assertThat(snapshot.waitingSignInSeatCount).isEqualTo(0)
+            assertThat(snapshot.attentionCount).isEqualTo(0)
+            assertThat(snapshot.allSignedIn).isTrue()
+            assertThat(snapshot.signInHeadline).isEqualTo("今天全部完成签到")
+            assertThat(snapshot.signInDetail).isEqualTo("已签到 1 / 1 个座位。")
+            assertThat(snapshot.accountSummaries.single().statusText).isEqualTo("今天预约已全部签到")
+        }
+
     private fun task(
         id: String,
         studentId: String,

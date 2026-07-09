@@ -14,6 +14,7 @@ import com.wuyi.libraryauto.core.domain.usecase.PeriodicCheckInReservationSource
 import com.wuyi.libraryauto.core.domain.usecase.PeriodicCheckInSignInExecutor
 import com.wuyi.libraryauto.core.domain.usecase.RunPeriodicCheckInUseCase
 import com.wuyi.libraryauto.core.domain.usecase.TriggerSource
+import com.wuyi.libraryauto.core.network.seat.SeatBookingLiveState
 import com.wuyi.libraryauto.core.runtime.worker.PeriodicCheckInRunGate
 import com.wuyi.libraryauto.core.storage.audit.SignInAuditRepository
 import com.wuyi.libraryauto.core.storage.audit.SignInAuditWrite
@@ -91,6 +92,15 @@ class RunPeriodicCheckInBatchRunner(
 
     override suspend fun retry(studentId: String): BatchCheckInRowState =
         runCatching {
+            val snapshot = accountSeatActionExecutor.loadSnapshot(studentId)
+            if (snapshot.liveState == SeatBookingLiveState.RESERVED_WAITING_SIGNIN && !snapshot.checkinWindowOpen) {
+                return@runCatching BatchCheckInRowState(
+                    studentId = studentId,
+                    status = BatchCheckInRowStatus.Skipped,
+                    message = "未到签到时间",
+                    canRetry = false,
+                )
+            }
             val result = accountSeatActionExecutor.performAction(studentId, AccountSeatAction.CheckIn)
             BatchCheckInRowState(
                 studentId = studentId,
@@ -203,9 +213,32 @@ class RunPeriodicCheckInBatchRunner(
                     canRetry = false,
                 )
             onProgress(report(rowOrder, rows))
+            val snapshot =
+                runCatching { accountSeatActionExecutor.loadSnapshot(studentId) }.getOrNull()
+            if (snapshot?.liveState == SeatBookingLiveState.RESERVED_WAITING_SIGNIN && !snapshot.checkinWindowOpen) {
+                rows[studentId] =
+                    BatchCheckInRowState(
+                        studentId = studentId,
+                        status = BatchCheckInRowStatus.Skipped,
+                        message = "未到签到时间",
+                        canRetry = false,
+                    )
+                onProgress(report(rowOrder, rows))
+                return SignInAttemptResult(
+                    correlationId = attempt.reservation.taskId,
+                    matchedMinor = null,
+                    seenMinors = emptyList(),
+                    signInError = null,
+                    scanDurationMillis = 0L,
+                )
+            }
             val result =
                 runCatching {
-                    accountSeatActionExecutor.performAction(studentId, AccountSeatAction.CheckIn)
+                    accountSeatActionExecutor.performAction(
+                        studentId,
+                        AccountSeatAction.CheckIn,
+                        attempt.reservation.bookingId,
+                    )
                 }
             // BUG-C / BUG-E 修复：从 typed 异常 / 结果对象读取已识别的 SignInError，
             // 同时让 UI 批量签到也写入 SignInAuditRepository，与 PeriodicWorker 路径一致。

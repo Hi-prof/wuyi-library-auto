@@ -81,6 +81,7 @@ import com.wuyi.libraryauto.ui.components.StatusBadge
 import com.wuyi.libraryauto.ui.components.StatusTone
 import com.wuyi.libraryauto.ui.repository.account.AccountExportRequest
 import com.wuyi.libraryauto.ui.repository.session.SessionRepository
+import com.wuyi.libraryauto.ui.repository.task.AccountSeatAction
 import com.wuyi.libraryauto.ui.repository.task.AccountSeatActionExecutor
 import com.wuyi.libraryauto.ui.repository.task.AccountStatusRepository
 import com.wuyi.libraryauto.ui.viewmodel.AccountBookingEntry
@@ -187,7 +188,12 @@ fun AccountManagementScreen(
                     refreshAllState = uiState.refreshAllState,
                     batchCheckInState = uiState.batchCheckInState,
                     isAnyBatchActive = isAnyBatchActive,
-                    batchCheckInEnabled = batchCheckInRunner != null,
+                    batchCheckInEnabled =
+                        batchCheckInRunner != null &&
+                            uiState.accounts.any { account ->
+                                account.primaryAction == AccountSeatAction.CheckIn &&
+                                    account.primaryActionEnabled
+                            },
                     onRefreshAll = viewModel::refreshAllAccountsManually,
                     onStartBatchCheckIn = viewModel::startBatchCheckIn,
                     onOpenBulkImport = viewModel::openBulkImportDialog,

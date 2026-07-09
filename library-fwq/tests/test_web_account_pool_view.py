@@ -24,6 +24,7 @@ import tempfile
 import unittest
 from datetime import UTC, datetime, time as dtime, timedelta
 from pathlib import Path
+from urllib.parse import unquote
 
 from fastapi.testclient import TestClient
 
@@ -34,6 +35,7 @@ from prevent_auto.account_pool.models import (
     PoolStatus,
 )
 from prevent_auto.database import initialize_database
+from prevent_auto.models import BookingSnapshot
 from prevent_auto.services.account_password_cipher import (
     AccountPasswordCipher,
     generate_secret_key,
@@ -56,6 +58,7 @@ from prevent_auto.web.account_pool_view import (
     normalize_pool_tab,
 )
 from prevent_auto.web.app import create_app
+from wuyi_seat_bot.seat_api import SHANGHAI_TZ
 
 
 class _FakeClock:
@@ -388,11 +391,67 @@ class AccountsPagePoolTabRoutingTest(unittest.TestCase):
         self.assertIn("迁入活跃池", response.text)
         self.assertIn("迁入拉黑号池", response.text)
         self.assertIn("迁入未启用池", response.text)
+        self.assertIn("未预约移入未启用池", response.text)
         # 表单 action 指向 migrate 端点
         self.assertIn(
             f"action=\"/accounts/{active_id}/migrate\"",
             response.text,
         )
+
+    def test_active_tab_collapses_same_day_bookings_with_checked_in_first(self) -> None:
+        self.login()
+        active_id = self._seed_active_via_service(student_id="20231121137")
+        today = datetime.now(SHANGHAI_TZ).date()
+        today_cancelled = datetime(
+            today.year, today.month, today.day, 8, 0, tzinfo=SHANGHAI_TZ
+        )
+        today_checked_in = datetime(
+            today.year, today.month, today.day, 12, 55, tzinfo=SHANGHAI_TZ
+        )
+        tomorrow_pending = today_cancelled + timedelta(days=1)
+        repository = self.client.app.state.services.booking_snapshots_repository
+        assert repository is not None
+        repository.replace_for_account(
+            account_id=active_id,
+            refreshed_at=datetime.now(SHANGHAI_TZ).replace(microsecond=0).isoformat(),
+            bookings=[
+                BookingSnapshot(
+                    booking_id="cancelled-today",
+                    room_name="自习室圆形二楼",
+                    seat_number="17",
+                    status="4",
+                    start_time=int(today_cancelled.timestamp()),
+                    duration_seconds=2 * 60 * 60,
+                ),
+                BookingSnapshot(
+                    booking_id="checked-in-today",
+                    room_name="自习室圆形二楼",
+                    seat_number="17",
+                    status="1",
+                    start_time=int(today_checked_in.timestamp()),
+                    duration_seconds=9 * 60 * 60 + 5 * 60,
+                ),
+                BookingSnapshot(
+                    booking_id="pending-tomorrow",
+                    room_name="自习室圆形二楼",
+                    seat_number="17",
+                    status="0",
+                    start_time=int(tomorrow_pending.timestamp()),
+                    duration_seconds=14 * 60 * 60,
+                ),
+            ],
+        )
+
+        response = self.client.get("/accounts?pool=active")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("共 2 条", response.text)
+        self.assertIn('data-booking-row="1"', response.text)
+        self.assertNotIn('data-booking-row="2"', response.text)
+        self.assertIn("已签到", response.text)
+        self.assertNotIn("已取消", response.text)
+        self.assertIn("12:55-22:00", response.text)
+        self.assertNotIn("08:00-10:00", response.text)
 
     def test_accounts_page_falls_back_to_active_on_unknown_pool(self) -> None:
         self.login()
@@ -471,6 +530,79 @@ class AccountsPagePoolTabRoutingTest(unittest.TestCase):
         assert pool_service is not None
         active_entries = pool_service.list_by_pool(PoolStatus.ACTIVE)
         self.assertEqual({e.account_id for e in active_entries}, {active_id})
+
+    def test_move_unbooked_active_accounts_to_idle_keeps_protected_bookings(self) -> None:
+        self.login()
+        no_booking_id = self._seed_active_via_service(student_id="20231121138")
+        checked_in_id = self._seed_active_via_service(student_id="20231121139")
+        future_pending_id = self._seed_active_via_service(student_id="20231121140")
+        services = self.client.app.state.services
+        repository = services.booking_snapshots_repository
+        assert repository is not None
+        today = datetime.now(SHANGHAI_TZ).date()
+        today_start = datetime(
+            today.year, today.month, today.day, 12, 0, tzinfo=SHANGHAI_TZ
+        )
+        tomorrow_start = today_start + timedelta(days=1)
+        refreshed_ids: list[int] = []
+
+        def fake_run_account_once(account_id: int) -> None:
+            refreshed_ids.append(account_id)
+            bookings: list[BookingSnapshot] = []
+            if account_id == checked_in_id:
+                bookings = [
+                    BookingSnapshot(
+                        booking_id="checked-in-today",
+                        room_name="自习室圆形二楼",
+                        seat_number="18",
+                        status="1",
+                        start_time=int(today_start.timestamp()),
+                        duration_seconds=2 * 60 * 60,
+                    )
+                ]
+            elif account_id == future_pending_id:
+                bookings = [
+                    BookingSnapshot(
+                        booking_id="pending-tomorrow",
+                        room_name="自习室圆形二楼",
+                        seat_number="19",
+                        status="0",
+                        start_time=int(tomorrow_start.timestamp()),
+                        duration_seconds=14 * 60 * 60,
+                    )
+                ]
+            repository.replace_for_account(
+                account_id=account_id,
+                bookings=bookings,
+                refreshed_at=datetime.now(SHANGHAI_TZ)
+                .replace(microsecond=0)
+                .isoformat(),
+            )
+
+        services.monitor_loop.run_account_once = fake_run_account_once
+
+        response = self.client.post(
+            "/accounts/move-unbooked-to-idle",
+            follow_redirects=False,
+        )
+
+        self.assertEqual(response.status_code, 303)
+        location = unquote(response.headers["location"])
+        self.assertIn("/accounts?pool=active", location)
+        self.assertIn("已移动 1 个未预约账号到未启用池", location)
+        self.assertEqual(
+            set(refreshed_ids),
+            {no_booking_id, checked_in_id, future_pending_id},
+        )
+        pool_service = services.account_pool_service
+        assert pool_service is not None
+        idle_entries = pool_service.list_by_pool(PoolStatus.IDLE)
+        active_entries = pool_service.list_by_pool(PoolStatus.ACTIVE)
+        self.assertEqual({entry.account_id for entry in idle_entries}, {no_booking_id})
+        self.assertEqual(
+            {entry.account_id for entry in active_entries},
+            {checked_in_id, future_pending_id},
+        )
 
 
 if __name__ == "__main__":

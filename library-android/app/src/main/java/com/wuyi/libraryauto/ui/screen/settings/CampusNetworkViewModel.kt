@@ -182,15 +182,3 @@ class CampusNetworkViewModelFactory(
         ) as T
     }
 }
-
-internal fun String.maskSensitive(): String {
-    val value = trim()
-    if (value.isBlank()) {
-        return ""
-    }
-    return when {
-        value.length <= 2 -> "${value.first()}*"
-        value.length <= 6 -> "${value.take(1)}***${value.takeLast(1)}"
-        else -> "${value.take(3)}***${value.takeLast(3)}"
-    }
-}

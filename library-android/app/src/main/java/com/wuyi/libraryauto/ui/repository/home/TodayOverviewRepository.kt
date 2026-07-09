@@ -133,22 +133,20 @@ class TodayOverviewRepository(
         return when (liveState) {
             SeatBookingLiveState.RESERVED_WAITING_SIGNIN ->
                 copy(
-                    reservedSeatCount = maxOf(reservedSeatCount, 1),
-                    waitingSignInCount = maxOf(waitingSignInCount, 1),
+                    reservedSeatCount = 1,
+                    signedInSeatCount = 0,
+                    waitingSignInCount = 1,
+                    reservationQueueCount = 0,
+                    attentionCount = 0,
                 )
-            SeatBookingLiveState.ACTIVE_SIGNED_IN -> {
-                val adjustedWaiting =
-                    if (signedInSeatCount == 0 && waitingSignInCount > 0) {
-                        waitingSignInCount - 1
-                    } else {
-                        waitingSignInCount
-                    }
+            SeatBookingLiveState.ACTIVE_SIGNED_IN ->
                 copy(
-                    reservedSeatCount = maxOf(reservedSeatCount, 1),
-                    signedInSeatCount = maxOf(signedInSeatCount, 1),
-                    waitingSignInCount = adjustedWaiting,
+                    reservedSeatCount = 1,
+                    signedInSeatCount = 1,
+                    waitingSignInCount = 0,
+                    reservationQueueCount = 0,
+                    attentionCount = 0,
                 )
-            }
             SeatBookingLiveState.NEED_LOGIN,
             SeatBookingLiveState.IDLE,
             SeatBookingLiveState.FINISHED_OR_HISTORY,
